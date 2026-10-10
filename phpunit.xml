@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         cacheDirectory=".cache/phpunit"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         failOnDeprecation="true"
+         beStrictAboutOutputDuringTests="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerWarnings="true">
+
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+        <testsuite name="Arch">
+            <directory>tests/Arch</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <include>
+            <directory>backend</directory>
+            <directory>api</directory>
+            <directory>admin</directory>
+            <directory>frontend</directory>
+        </include>
+    </source>
+
+    <!--
+        The test suite never touches the application database. It runs on an
+        in-memory SQLite connection so a test run cannot damage real data, and
+        so `composer test` works on a machine with no database at all.
+    -->
+    <php>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="DB_DRIVER" value="sqlite" force="true"/>
+        <env name="APP_DEBUG" value="false" force="true"/>
+        <env name="LOG_LEVEL" value="error" force="true"/>
+    </php>
+</phpunit>

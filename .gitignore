@@ -1,0 +1,30 @@
+# Secrets and environment
+/.env
+/.env.*
+!/.env.example
+
+# Dependencies and build output
+/vendor/
+/composer.phar
+
+# Runtime — everything the app writes while running
+/storage/logs/*
+/storage/cache/*
+/storage/tmp/*
+/storage/exports/*
+/storage/uploads/*
+!/storage/**/.gitkeep
+!/storage/.htaccess
+
+# Local overrides
+*.local
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Keep the structure visible
+!**/.gitkeep
+
+# tool caches (PHPStan, PHPUnit)
+.cache/

@@ -1,0 +1,4 @@
+# Runtime data: logs, cache, exports and uploads. Nothing here is a public
+# asset, and nothing here may ever be fetched by URL. Uploaded files leave this
+# directory only through a controller that authorises the request first.
+Require all denied
