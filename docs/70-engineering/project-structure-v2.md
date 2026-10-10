@@ -103,7 +103,7 @@ indirection to remember.
 | A use case | `backend/Services/{Area}/` | `Services/Directory/PublishListingService::publish` |
 | A business rule | `backend/Domain/{Area}/` | `Domain/Directory/Listing::canPublish` |
 | A query | `backend/Repositories/{Area}/` | `Repositories/Directory/ListingRepository::findBySlug` |
-| A table change | `database/migrations/` | `2026_10_11_0001_create_listings.sql` |
+| A table change | `database/migrations/` | `2026_10_11_120000_create_audit_entries.php` |
 | A scheduled job | `backend/Console/Commands/` | `PurgeExpiredSessionsCommand` |
 | Something that talks to the outside world | `backend/Integrations/` | `TelegramClient` |
 
@@ -364,6 +364,51 @@ trusted Monolog to fail on an unwritable log path, but Monolog opens its stream
 lazily, so the failure would have arrived on the first log line of the incident
 the logs were meant to record; the path is checked at boot, which is what
 `deployment.md` §11 (PM-3) always claimed.
+
+### 11.3 Third pass — the Identity slice's spine (2026-10-11)
+
+The first product slice began with the parts every later table depends on: the
+clock, the migration machinery, the console and the audit writer. None of them
+is product-specific, which is exactly why they came first — M1 items 2, 11 and
+12 of `implementation-plan-v1.0.md`.
+
+| Built | Where | Traces to |
+| --- | --- | --- |
+| `Clock` / `SystemClock` — the only source of "now", always UTC, injected | `backend/Support/{Clock,SystemClock}.php` | TR-05, STR-3 |
+| Migration machinery: `Migration`, `MigrationLocator`, `MigrationRepository`, `Migrator` | `backend/Database/Migrations/` | TR-173, TR-175, TR-181; architecture §10 |
+| `migrate`, `migration:status`, `rollback [--steps=n]`, wired through the composition root | `backend/Console/`, `routes/console.php`, `bin/console` | architecture §10, TD-06 |
+| The audit trail: its table, an append-only repository, and a recorder that fails the action it could not record | `database/migrations/2026_10_11_120000_create_audit_entries.php`, `backend/Domain/Platform/`, `backend/Repositories/Platform/`, `backend/Services/Platform/` | C-29, TR-08, TR-167, OM-6.1–6.3 |
+| `ActorType` — Guest, Customer, Operator, Administrator | `backend/Domain/Platform/ActorType.php` | OM §3, TR-40, D-54 |
+
+`Platform` was checked against §4.1 before the first file was written: audit,
+analytics, notifications, jobs and cache are its declared territory, so the
+audit trail belongs there and nowhere else.
+
+New assertions arrive with the code they guard, as §2.2 requires: the audit
+trail is append-only (`UPDATE` or `DELETE` against `audit_entries` fails the
+build, while the migration that owns the table is exempt), DDL is confined to
+`backend/Database`, `backend/Repositories` and `database/migrations`, and
+`database/migrations/` is scanned as source. The suite stands at 90 tests and
+2,458 assertions; Pint, PHPStan at level max and PHPUnit are green together.
+
+Two things the slice refused to decide, because the specification does not:
+
+- **Attribution for platform-initiated actions.** OM §3 names four actors, and
+  a scheduled job is none of them — while the same document's prose says "there
+  is no fourth" over a table that lists four plus a Business owner marked *not
+  a platform actor* (D-54). The contradiction is real and is reported rather
+  than smoothed over: whether a job records as a system actor, as the
+  Administrator who scheduled it, or not at all is an owner question, so no
+  fifth `ActorType` case was invented.
+- **The retention period for audit entries**, which is `PENDING COUNSEL`
+  (L-21, D-46) and therefore never invented in code.
+
+This pass also corrected two defects it found in the documents:
+
+| Defect | Correction |
+| --- | --- |
+| §4's migration example, `2026_10_11_0001_create_listings.sql`, contradicted architecture §10 and the locator: migrations are `.php` and named `YYYY_MM_DD_HHMMSS_description` | the example now shows the migration that exists |
+| `30-technical/architecture.md` §10 described a `Migration` base class to extend; the contract is an interface, which is what was built | recorded in §10 as a deliberate deviation, with the reason |
 
 ---
 

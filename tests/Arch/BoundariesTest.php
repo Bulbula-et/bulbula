@@ -42,6 +42,27 @@ final class BoundariesTest extends TestCase
     ];
 
     /**
+     * The audit trail records what happened; nothing rewrites it (OM-6.2,
+     * OPX-12.2). The migrations are excluded on purpose — they own whether the
+     * table exists, which is not the same as owning its rows.
+     */
+    #[Test]
+    public function the_audit_trail_is_append_only(): void
+    {
+        foreach (SourceFiles::in('backend') as $file) {
+            $code = SourceFiles::withoutComments($file);
+
+            foreach (['UPDATE audit_entries', 'DELETE FROM audit_entries'] as $forbidden) {
+                self::assertStringNotContainsStringIgnoringCase(
+                    $forbidden,
+                    $code,
+                    SourceFiles::relative($file) . ' rewrites the audit trail.',
+                );
+            }
+        }
+    }
+
+    /**
      * The composition root is explicit: an owner decision (R-3, 2026-10-11)
      * removed the container in favour of hand-written controller factories, so
      * a container coming back — under any name — is a design regression.
@@ -144,7 +165,10 @@ final class BoundariesTest extends TestCase
         $offenders = [];
 
         foreach (SourceFiles::in(...SourceFiles::ROOTS) as $file) {
-            if (SourceFiles::isInside($file, 'backend/Database', 'backend/Repositories')) {
+            // Migrations are the third legitimate home for SQL: they own the
+            // schema, and a schema is described in DDL. They may not run
+            // queries, which is what the rest of this rule protects.
+            if (SourceFiles::isInside($file, 'backend/Database', 'backend/Repositories', 'database/migrations')) {
                 continue;
             }
 

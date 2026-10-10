@@ -44,6 +44,11 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
+      - name: Validate the manifest and the lock file
+        # A lock file that does not match composer.json installs something
+        # nobody reviewed.
+        run: composer validate --strict
+
       - name: Lint (Pint, PSR-12)
         run: composer lint
 

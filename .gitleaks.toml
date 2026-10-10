@@ -29,14 +29,15 @@ regexes = [
   '''(?i)(changeme|change_me|placeholder|your[-_ ]?(key|token|secret|password)|example|dummy|redacted|xxxx+)''',
 ]
 
+# Words that mark the surrounding text as documentation rather than data.
+# These belong to the allowlist: at the file root they are not read at all.
+stopwords = [
+  'example',
+  'placeholder',
+]
+
 # Scope note for local use: the CI job scans git (tracked content and full
 # history), so a developer reproducing it locally runs `gitleaks git .`.
 # Scanning the working directory instead (`gitleaks dir .`) also walks files
 # Git ignores — `.env` above all — where a finding is a local-state question,
 # not a repository one.
-
-# Stop the scan at the second-order noise sources.
-stopwords = [
-  'example',
-  'placeholder',
-]

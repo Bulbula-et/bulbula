@@ -55,9 +55,9 @@ abstract class ApplicationTestCase extends TestCase
      * environment is the only seam, and substituting a dependency afterwards
      * would test something the application cannot do.
      */
-    protected function newApplication(): Application
+    protected function newApplication(?string $basePath = null): Application
     {
-        $application = new Application(dirname(__DIR__, 2));
+        $application = new Application($basePath ?? dirname(__DIR__, 2));
         $application->boot();
 
         return $application;

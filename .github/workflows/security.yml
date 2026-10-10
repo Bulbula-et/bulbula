@@ -55,3 +55,8 @@ jobs:
 
       - name: composer audit (locked)
         run: composer audit --locked --no-interaction
+
+      - name: Platform requirements (locked)
+        # Production is a different machine. A missing extension must fail
+        # here rather than on the host during a deploy (IN-1).
+        run: composer check-platform-reqs --lock --no-interaction

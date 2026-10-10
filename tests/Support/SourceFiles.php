@@ -21,7 +21,7 @@ use SplFileInfo;
 final class SourceFiles
 {
     /** The directories that hold application code. */
-    public const ROOTS = ['backend', 'frontend', 'api', 'admin', 'routes', 'bin'];
+    public const ROOTS = ['backend', 'frontend', 'api', 'admin', 'routes', 'bin', 'database'];
 
     /** @return list<string> absolute paths, sorted */
     public static function in(string ...$roots): array

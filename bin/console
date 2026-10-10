@@ -26,7 +26,5 @@ require $autoload;
 $application = new Application(BASE_PATH);
 $application->boot();
 
-fwrite(STDOUT, "Bulbula console — no commands are registered yet.\n");
-fwrite(STDOUT, "Commands land here with each feature slice; see docs/70-engineering/project-structure-v2.md.\n");
-
-exit(0);
+// The only exit() in the project: every command returns a code instead.
+exit($application->console()->run($argv));

@@ -431,21 +431,34 @@ hermetic, so migrations stay portable or branch explicitly where they cannot.
 ## 10. Migrations
 
 Files live in `database/migrations/` named
-`YYYY_MM_DD_HHMMSS_description.php`, each returning an anonymous class
-extending `Migration` with `up(Connection)` and `down(Connection)`.
+`YYYY_MM_DD_HHMMSS_description.php`, each returning an anonymous class that
+**implements** `Migration` with `up(Connection)` and `down(Connection)` — an
+interface rather than a base class, because there is nothing to inherit and the
+contract should stay as small as the job (a recorded, deliberate deviation from
+the "extending" wording this document carried while the machinery was unbuilt).
 
-**Not yet in place.** No migration file, locator, repository, migrator or
-console command exists yet; the first migration arrives with the first product
-table (M2). The conventions below are fixed now so that the first one is not
-invented under pressure:
+**Built (2026-10-11, M1).** `MigrationLocator` discovers files in filename
+order, `MigrationRepository` owns the `migrations` tracking table (`migration`
+primary key, `batch`, `executed_at`) and `Migrator` applies, reverts and
+reports. A batch records each migration with the same batch number; a rollback
+reverts the last batch, or the last *n* with `--steps=n`. A migration that
+sorts **before** an applied one is refused rather than applied: that is a branch
+that went backwards, and the history it would rewrite cannot be rewritten back.
 
-`MigrationLocator` discovers files in filename order, `MigrationRepository`
-owns the `migrations` tracking table (`migration` primary key, `batch`,
-`executed_at`) and `Migrator` applies or reverts them. A batch records each
-migration with the same batch number; a rollback reverts the last batch, or
-the last *n* with `--steps=n`. DDL is never wrapped in a transaction, because
-MariaDB commits implicitly on DDL. Migrations are **forward-only** once
-shipped: a correction is a new migration, never an edit to an applied one.
+Three decisions worth stating, because each is a rule and not an accident:
+
+- **No wrapper transaction.** MariaDB commits DDL implicitly, so a transaction
+  around a migration would not make it atomic — it would only hide where it
+  stopped. The ledger row is therefore written *after* the migration succeeds,
+  and a migration is expected to be safe to re-run from the point it failed.
+- **The ledger table is created by the runner**, never by a migration: nothing
+  can record what has been applied before something knows how to record it.
+- **Migrations are forward-only once shipped**: a correction is a new migration,
+  never an edit to an applied one.
+
+The first migration to land is `2026_10_11_120000_create_audit_entries.php`, the
+audit trail (C-29, TR-08) — a platform table, so it arrived with M1 rather than
+with the first product table in M2.
 
 ```bash
 php bin/console migrate              # apply everything pending
