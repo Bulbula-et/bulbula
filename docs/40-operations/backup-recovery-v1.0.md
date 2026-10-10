@@ -9,6 +9,12 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built. The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement, threshold or header was weakened**; what is not wired up yet is
+> marked **not yet in place**, with the milestone that delivers it.
+
 ## Scope
 
 What is backed up, what is deliberately not, how backups are protected,
@@ -88,7 +94,7 @@ authority for the mechanics), rollback of a release
 | BR-3.1 | **A backup is the entire database in one portable file.** It deserves stronger protection than the running system, not weaker | BK-5 |
 | BR-3.2 | **Backups are access-controlled; access is limited to those who need it and is recorded** | BK-5, PG-10.3 |
 | BR-3.3 | **Backups are never web-accessible.** Not in `public/`, not reachable by URL | PS-2, DR-1 |
-| BR-3.4 | **Backups are never committed to the repository** | TR-198, gitleaks |
+| BR-3.4 | **Backups are never committed to the repository** | TR-198; secret scan (to be wired) |
 | BR-3.5 | **Whether backups are encrypted at rest, and with what key custody, is Open (D-23).** Encryption is the most direct answer to Art. 44's exception, which is a reason to decide it | D-23, Art. 44 |
 | BR-3.6 | **Loss or exposure of a backup is a personal-data breach** and is handled under `incident-response-v1.0.md` §7 | IR §7 |
 | BR-3.7 | **Backups age out under the retention schedule.** An indefinitely retained backup defeats erasure — **PENDING COUNSEL (L-21)** | RET §4, Art. 15 |

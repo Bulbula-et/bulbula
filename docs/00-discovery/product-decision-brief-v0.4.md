@@ -455,6 +455,13 @@ documentation exists — a context file that summarises documents which do not
 yet exist would be fabrication. The content specification for each file is in
 v0.3 §25 and remains valid.
 
+> **Status note (2026-10-11).** The `.ai/` context layer was **dropped from the
+> build** by an owner decision made when the repository was rebuilt: the
+> structure document (`70-engineering/project-structure-v2.md`) and the code it
+> describes are the implementation context, and a parallel summary of documents
+> that are already in `docs/` is a second source of truth. This section stands
+> as the record of what was planned in v0.4, not as outstanding work.
+
 ---
 
 ## 15. Phase 3 — Product Requirements Document v1.0

@@ -9,6 +9,13 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | `docs/architecture.md` (Phase 1; relocated here and extended to V1) |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built: the surface-first layout, the namespace map, the boot sequence, the
+> routing API and the middleware/health/migration status. The authority for the
+> layout is [`project-structure-v2.md`](../70-engineering/project-structure-v2.md).
+> **No requirement was removed or weakened**; controls that are not yet built
+> are marked **not yet in place** with the milestone that delivers them.
+
 **Scope.** The canonical description of how Bulbula is built: layers,
 components, boundaries and the rules that keep them honest. Constraints and
 their sources live in [`trd-v1.0.md`](trd-v1.0.md); this document is the map.
@@ -24,11 +31,15 @@ code. Nothing in Phase 1 is replaced.
 
 1. **Framework-free.** Plain PHP. No Laravel, Symfony full-stack, Laminas,
    Mezzio, Dotkernel, Slim or Flight. Small, single-purpose libraries are
-   welcome; application frameworks are not. `tests/Arch/ArchTest.php`
-   enforces this on every run.
-2. **Composition over magic.** `Application` is a composition root, not a
-   service container. Dependencies are constructed explicitly and passed in.
-   There is no auto-wiring, no annotation scanning, no reflection magic.
+   welcome; application frameworks are not. An architecture assertion in
+   `tests/Arch/DependenciesTest` enforces this.
+2. **Composition over magic.** `Application` is a composition root. There is
+   no annotation scanning and no reflection magic in application code: a class
+   states what it needs in its constructor and receives it. One small explicit
+   container exists. `Application::boot()` constructs every collaborator by
+   hand, in dependency order, and hands each controller to the kernel through
+   one written-out factory table. Nothing resolves a dependency from anywhere
+   else, and a route that names a controller nobody wired fails loudly.
 3. **One direction.** HTTP → application → domain → persistence. Inner layers
    never reference outer ones.
 4. **One implementation of every rule.** Web, API and Telegram are adapters
@@ -84,94 +95,120 @@ code. Nothing in Phase 1 is replaced.
 
 ### 2.2 Enforced boundaries
 
-These are architecture tests, not conventions. A violation fails the build.
+These are architecture tests — a violation fails the build. The suite lives
+at `tests/Arch/` and is **in place**; every rule below is asserted today, and a
+boundary added by a slice is asserted in the change that adds it (TR-01,
+IMP-20.6). `DependenciesTest` covers the framework rows and the dependency
+surface; `BoundariesTest` covers the boundaries and the absence of a container;
+`ConventionsTest` covers naming, strict types and the document root.
 
-| Rule | Enforced today |
+| Rule | Status |
 | --- | --- |
-| No framework namespaces | ✅ |
-| No ORM/DBAL namespaces | ✅ |
-| `PDO`/`mysqli`/`curl_init` only in `Bulbula\Database` | ✅ |
-| `Bulbula\Http` contains no SQL | ✅ |
-| Controllers never touch `Bulbula\Database` or `PDO` | ✅ |
-| Controllers suffixed `Controller`, HTTP exceptions suffixed `Exception` | ✅ |
-| Database layer independent of `Http`, `View`, `Console` | ✅ |
-| Service namespaces independent of `Http`, `View`, `Console` | ✅ |
-| `Bulbula\View` touches no database and no HTTP | ✅ |
-| `Env` read only inside `Bulbula\Config`; no superglobals elsewhere | ✅ |
-| All classes final, strict types, value objects readonly | ✅ |
-| No `dd`, `dump`, `die`, `var_dump`, `sleep`, `exit` in `src/` | ✅ |
+| No framework namespaces | In place — `DependenciesTest` |
+| No container or service locator; controllers come from an explicit factory table | In place — `BoundariesTest` |
+| No ORM/DBAL namespaces | In place — `DependenciesTest` |
+| `PDO`, `PDOStatement`, `PDOException`, `mysqli` only in `Bulbula\Backend\Database` | In place — `BoundariesTest` |
+| `curl_init` and family only in `Bulbula\Backend\Integrations` | In place — held by absence until the first adapter lands |
+| `Bulbula\Backend\Core` contains no SQL | In place — `BoundariesTest` |
+| Controllers never touch `Bulbula\Backend\Database` or `PDO` | In place — `BoundariesTest` |
+| Controllers suffixed `Controller`, HTTP exceptions suffixed `Exception` | In place — `ConventionsTest` |
+| `Bulbula\Backend\Database` independent of the HTTP layer and of every surface | In place — `BoundariesTest` |
+| `Bulbula\Backend\Domain` and `Bulbula\Backend\Services` independent of the HTTP layer and of every surface | In place — `BoundariesTest` |
+| `Bulbula\Backend\Core\View` touches no database and no HTTP | In place — `BoundariesTest` |
+| `Env` read only inside `Bulbula\Backend\Core`; no superglobals elsewhere | In place — `BoundariesTest` |
+| Every SQL statement lives in `Bulbula\Backend\Repositories\{Area}` | In place — `BoundariesTest` |
+| All classes final, strict types, value objects readonly | In place — Pint (`final_class`, `declare_strict_types`) and `ConventionsTest` |
+| No `dd`, `dump`, `die`, `var_dump`, `sleep`, `exit` in source | In place — `BoundariesTest` and `ConventionsTest` |
 
-**V1 obligation.** Every new namespace is added to these tests rather than
-left unguarded (TRD TR-01). Two consequences are easy to miss:
+Two consequences are easy to miss:
 
-- `curl_init` is restricted to `Bulbula\Database`, so **every outbound HTTP
-  call must sit behind an adapter** whose transport lives in an allowed
-  place; the test list is updated deliberately when that adapter arrives.
-- Service namespaces must be added to the "independent of presentation"
-  expectation as they are created.
+- **`curl_init` is confined to `Bulbula\Backend\Integrations`** (TD-07), so
+  every outbound HTTP call sits behind an adapter whose transport lives there.
+  When the first outbound adapter lands, the assertion names that namespace in
+  the same change — it is never relaxed instead.
+- **Domain and service namespaces are added to the "independent of
+  presentation" expectation as they are created**, not after the fact
+  (TR-01, IMP-4.3).
+
+> **Settled — composition root (owner, 2026-10-11).** The first pass recorded
+> a deviation here: a small explicit container used only at the edges. The
+> owner took the original absolute rule instead. There is no container, no
+> binding registry and no resolution-by-name anywhere in the build.
+> `Application::boot()` constructs each collaborator explicitly and lists one
+> factory per controller in `Bulbula\Backend\Core\ControllerFactory`; a route
+> that names a class no factory covers raises a `ConfigurationException` and a
+> readable 500 rather than being conjured. The rule in §17 is unconditional
+> again, and `tests/Arch/BoundariesTest` fails if a service locator returns.
 
 ---
 
 ## 3. Layout
 
 ```text
+admin/                 Bulbula\Admin\ — operations console: controllers, views
+api/                   Bulbula\Api\ — JSON v1: controllers, requests, resources
+backend/               Bulbula\Backend\ — the application (Core, Database, Domain,
+                       Repositories, Services, Security, Integrations, Mail,
+                       Console, Exceptions, Support)
 bin/console            CLI entry point: migrations, scheduled jobs, maintenance
-config/                app.php, database.php, logging.php — arrays built from env
-database/migrations/   ordered, reversible migrations
+config/                app.php, database.php, security.php, logging.php, mail.php
+database/migrations/   ordered, forward-only migrations
+database/reference/    curated catalogue data, not schema (D-56)
 docs/                  documentation (this file lives in docs/30-technical/)
+frontend/              Bulbula\Frontend\ — public pages: controllers, views
 public/                document root: index.php, .htaccess, assets
-resources/views/       templates, outside the document root
-routes/                web.php, api.php
-src/                   PSR-4 source under the Bulbula\ namespace
+routes/                web.php, api.php, admin.php, console.php
 storage/               runtime artefacts (logs, cache, uploads) — contents git-ignored
-tests/                 Unit, Feature, Arch
+tests/                 Unit, Feature, Arch, Support
 ```
 
-Directories for future modules are not created in advance: a directory
-appears when the code that belongs in it does.
+The four surfaces and the backend layers exist from the start, because they are
+the map. **A directory for a capability appears when the code that belongs in
+it does** — `backend/Services/Directory/` is created by the first Directory
+service, not in advance of it.
 
 ### 3.1 Namespaces
 
-**Existing (Phase 1):**
+One PSR-4 root per surface, and layers inside the backend. A path in the
+repository is enough to know what a file is and who may call it.
 
-| Namespace | Responsibility |
-| --- | --- |
-| `Bulbula\Foundation` | `Application` composition root, `Environment`, `Services`, `HttpKernelFactory` |
-| `Bulbula\Config` | Immutable configuration repository with dot-notation access |
-| `Bulbula\Logging` | PSR-3 logger factory (Monolog) |
-| `Bulbula\Error` | Error-to-exception promotion, logging, safe rendering |
-| `Bulbula\Support` | Typed environment reader |
-| `Bulbula\Exception` | Configuration failures |
-| `Bulbula\Http` | Request, Response, Status, Method, Kernel, emitter, HTTP errors |
-| `Bulbula\Http\Routing` | Route registration, FastRoute matching, named-route URLs |
-| `Bulbula\Http\Middleware` | Middleware contract, pipeline, `SecureHeaders` |
-| `Bulbula\Http\Controller` | Thin HTTP boundary |
-| `Bulbula\Database` | PDO connection, configuration, failure translation |
-| `Bulbula\Database\Migrations` | Migration contract, locator, repository, migrator |
-| `Bulbula\Console` | The command runner behind `bin/console` |
-| `Bulbula\Diagnostics` | Health checks and report |
-| `Bulbula\View` | Server-side rendering |
-
-**Indicative V1 additions** — shape, not a mandate; each lands with the
-capability that needs it:
-
-| Namespace | Responsibility | Capabilities |
+| Namespace | Path | Responsibility |
 | --- | --- | --- |
-| `Bulbula\Directory` | Business, Branch, Listing state, taxonomy, Areas | C-04…C-12, C-19…C-24 |
-| `Bulbula\Operations` | Permission, provenance, verification, corrections, reports, queues | C-19…C-21, C-26 |
-| `Bulbula\Identity` | Customers, provider identities, sessions, OTP, staff users, roles | C-30…C-33, C-36 |
-| `Bulbula\Community` | Reviews, ratings, saves, moderation | C-13, C-14, C-25, C-34, C-35 |
-| `Bulbula\Advertising` | Packages, placements, campaigns, delivery | C-16, C-27 |
-| `Bulbula\Search` | Query interpretation, candidates, ranking pipeline | C-02, C-03, C-07 |
-| `Bulbula\Media` | Upload validation, derivatives, storage adapter | C-22 |
-| `Bulbula\Mail` | Message composition and transport adapter | C-31, C-39 |
-| `Bulbula\Analytics` | Event recording and rollups | C-28, C-38 |
-| `Bulbula\Audit` | Append-only privileged-action log | C-29 |
-| `Bulbula\Telegram` | Mini App context validation and surface adapter | D-49, D-33 |
+| `Bulbula\Frontend` | `frontend/` | HTML pages: controllers and views |
+| `Bulbula\Api` | `api/` | JSON v1: controllers, request objects, resources |
+| `Bulbula\Admin` | `admin/` | Moderation and operations console: controllers and views |
+| `Bulbula\Backend\Core` | `backend/Core/` | Composition root, environment, config, request, response, router, controller factories, kernel, view, error rendering |
+| `Bulbula\Backend\Database` | `backend/Database/` | PDO connection, connection factory, migration machinery |
+| `Bulbula\Backend\Exceptions` | `backend/Exceptions/` | Typed failures, including the HTTP exceptions |
+| `Bulbula\Backend\Support` | `backend/Support/` | Clock, identifiers, logger factory, template helpers |
+| `Bulbula\Backend\Security` | `backend/Security/` | Sessions, CSRF, permission checks, rate limiting, audit trail |
+| `Bulbula\Backend\Integrations` | `backend/Integrations/` | Outbound HTTP — the only namespace that may own a transport (TD-07) |
+| `Bulbula\Backend\Mail` | `backend/Mail/` | Message composition and delivery state |
+| `Bulbula\Backend\Console\Commands` | `backend/Console/Commands/` | Scheduled and manual jobs behind `bin/console` |
+| `Bulbula\Backend\Domain\{Area}` | `backend/Domain/{Area}/` | Entities, value objects and rules |
+| `Bulbula\Backend\Services\{Area}` | `backend/Services/{Area}/` | Application services |
+| `Bulbula\Backend\Repositories\{Area}` | `backend/Repositories/{Area}/` | SQL, one repository per aggregate |
 
-Each area keeps its own `Domain`, service and `Repository` seams internally;
-cross-area work is orchestrated by an application service, never by reaching
-into another area's tables (TRD TR-16).
+**Areas** are the bounded areas of TRD §11 — `Directory`, `Operations`,
+`Identity`, `Community`, `Advertising`, `Platform` — with `Search` and `Media`
+sitting beside them. A capability therefore has three known homes
+(`Domain/{Area}`, `Services/{Area}`, `Repositories/{Area}`) plus the surface
+that presents it. Cross-area work is orchestrated by an application service,
+never by reaching into another area's tables (TRD TR-16, TR-17).
+
+**Capability coverage** — the same mapping, by area rather than by layer:
+
+| Area | Capabilities |
+| --- | --- |
+| Directory | C-04…C-12, C-19…C-24 |
+| Operations | C-19…C-21, C-26 |
+| Identity | C-30…C-33, C-36 |
+| Community | C-13, C-14, C-25, C-34, C-35 |
+| Advertising | C-16, C-27 |
+| Search | C-02, C-03, C-07 |
+| Media | C-22 |
+| Platform (audit, analytics, jobs, cache, mail) | C-28, C-29, C-31, C-38, C-39 |
+| Integrations | D-33, D-49 (Telegram, maps, Google, mail provider) |
 
 ---
 
@@ -182,20 +219,27 @@ it performs two version-agnostic guards — interpreter version and presence of
 `vendor/autoload.php` — because a failure at that stage happens before any
 handler could report it.
 
-`Application::boot($basePath)` then:
+`Application::boot()` then:
 
 1. Loads `.env` when present (never committed; see `.env.example`).
-2. Builds the `Config` repository from `config/*.php`.
-3. Resolves the `Environment` and applies the configured timezone.
-4. Builds the PSR-3 logger — JSON lines in production, readable elsewhere.
-5. Registers the error handler — verbose while developing, opaque in
+2. Builds the `Config` repository from `config/app.php`, `config/database.php`,
+   `config/security.php`, `config/logging.php` and `config/mail.php`.
+3. Applies the configured timezone and registers the error handler —
+   warnings become exceptions, output is verbose while developing and opaque in
    production, where the client receives only a reference id that is also
    written to the log.
+4. Loads `routes/web.php`, `routes/api.php` and `routes/admin.php` into the
+   `Router`.
+5. Constructs the shared collaborators, in dependency order: `Config`,
+   `Router`, `View` (given the `frontend/Views` and `admin/Views` roots),
+   `ErrorRenderer`, `Connection` (lazy — no socket is opened until a query
+   needs one), `HealthChecker`, the PSR-3 logger, then the `Kernel` with a
+   `ControllerFactory` holding one written-out factory per controller.
 
-`Services::forApplication()` constructs the shared collaborators explicitly.
-It is a typed factory, not a container: there is no `get(string $id)`, and
-every dependency can be followed in an IDE. As V1 services arrive they are
-added here with typed accessors.
+`Application` **is** the composition root: there is no container behind it. The
+whole wiring is the body of one method, so "where does this come from?" has a
+line number as its answer, and a controller that is not listed cannot be
+reached at all.
 
 ---
 
@@ -207,65 +251,86 @@ that is not an existing file or directory is rewritten internally to
 
 ```text
 public/index.php
-  └─ pre-boot guards                    interpreter version, autoloader present
-  └─ Application::boot(basePath)        .env → Config → Environment → logger → errors
-  └─ Services::forApplication(app)      explicit construction of collaborators
-  └─ HttpKernelFactory::create(app)     Router ← routes/web.php then routes/api.php
-  └─ Request::fromGlobals()
+  └─ guards                             interpreter version, autoloader present
+  └─ Application::boot()                .env → Config → timezone → errors → routes → bindings
+  └─ Request::fromGlobals()             superglobals read once, here and nowhere else
   └─ Kernel::handle(Request)
-        ├─ global pipeline    SecureHeaders → RequestId → Session → …
-        ├─ Router::match()    FastRoute: found | 405 | 404
-        ├─ route pipeline     authentication, authorization, CSRF, rate limit, surface
-        └─ handler            controller → application service → domain → repository
-  └─ ResponseEmitter::emit(Response)    status line, headers, body
+        ├─ correlation id    generated per request, returned as X-Request-Id
+        ├─ Router::match()   FastRoute: found | 405 (Allow header) | 404
+        ├─ handler           controller built by its factory, or a closure
+        └─ errors            HttpException and anything else → ErrorRenderer
+  └─ Response::send()                   status line, headers, body
 ```
 
-The global pipeline runs *around* error rendering, so even a 500 carries the
-security headers. The per-route pipeline runs after a successful match.
+**Not yet in place:** the global and per-route pipelines (§7) and the
+`SecureHeaders` middleware. Today the browser-facing security headers are set
+by `public/.htaccess`; TRD APP-7.2 requires them at the application layer so
+they survive a host change, and that is the M1 work.
+
+The error path runs inside `Kernel::handle`, so a 500 still carries
+`X-Request-Id` and is still rendered in the caller's format.
 
 ---
 
 ## 6. Routing
 
-Routes live in `routes/web.php` and `routes/api.php`. Each file returns a
-`Closure(Router, Services): void`, so a route file cannot do anything except
-register routes against the services it is handed.
+Routes live in `routes/web.php`, `routes/api.php`, `routes/admin.php` and
+`routes/console.php`. Each file returns a `Closure(Router): void`, so a route
+file can do exactly one thing: register paths against the router it is handed.
 
 ```php
-return static function (Router $router, Services $services): void {
-    $health = new HealthController($services->health());
+return static function (Router $router): void {
+    $slug = '[a-z0-9-]{1,80}';
 
-    $router->get('/health', static fn (): Response => $health->live())->name('health');
+    $router->get('/', ['Bulbula\Frontend\Controllers\HomeController', 'index']);
+    $router->get('/b/{business:' . $slug . '}', [BusinessController::class, 'show']);
 };
 ```
 
-- `get()`, `post()`, `put()`, `patch()`, `delete()` register a handler of
-  type `Closure(Request): Response`.
-- `group('/api/v1', …)` prefixes every route inside it. The API is versioned
-  from the first endpoint.
-- `name()` registers the route for `UrlGenerator`, which builds URLs from a
-  name plus parameters instead of hard-coded strings.
-- Matching is delegated to `nikic/fast-route`. A miss throws
-  `NotFoundException` (404); a path that exists under another verb throws
-  `MethodNotAllowedException` (405) carrying the allowed methods, which the
-  error handler turns into an `Allow` header.
+- `get()`, `post()`, `put()`, `patch()`, `delete()` accept either a
+  `[Controller::class, 'method']` pair — the normal case, built by its
+  factory and called as `($request, $params)` — or a closure taking
+  `(Request $request, array $vars)`.
+- **Versioning is a literal path prefix** (`/api/v1/…`). There is no route
+  group mechanism; a mechanism would be the beginning of a framework.
+- **Dynamic segments are constrained at the route**, not in the handler:
+  `{business:[a-z0-9-]{1,80}}`. A segment that does not match the pattern is
+  not a route at all, so a reserved word can never be reached through a
+  wildcard and a URL can never carry a payload.
+- Matching is delegated to `nikic/fast-route`. The kernel converts the result
+  into a `RouteMatch`; a miss becomes `HttpNotFoundException` (404), and a path
+  that exists under another verb becomes `MethodNotAllowedException` (405)
+  carrying an `Allow` header.
+- A route is registered **with the slice that implements it**. A path with no
+  handler behind it is a promise the application cannot keep, so the planned
+  paths live in a comment block in the route file until then.
 
-The router stays thin: register, match, generate. Model binding, controller
-resolution by string and middleware aliases would be the beginning of a
-framework.
+The router stays thin: register, match. Named routes, URL generation, model
+binding, middleware aliases and controller resolution by convention would be
+the beginning of a framework.
 
 ### 6.1 V1 route families
 
-| Prefix | Surface | Authentication |
-| --- | --- | --- |
-| `/` | Public web (discovery, profiles, static pages) | None |
-| `/account/*` | Customer web | Customer session |
-| `/ops/*` | Operations console | Staff session + permission |
-| `/api/v1/*` | Public JSON API | None, or bearer token |
-| `/api/v1/ops/*` | Operations JSON API | Staff token + permission |
+| Prefix | Surface | Authentication | File |
+| --- | --- | --- | --- |
+| `/` | Public web (discovery, profiles, static pages) | None, **except** the paths listed below | `routes/web.php` |
+| `/account/*` | Customer web | Customer session | `routes/web.php` |
+| `/ops/*` | Operations console | Staff session + permission | `routes/admin.php` |
+| `/api/v1/*` | Public JSON API | None, or bearer token | `routes/api.php` |
+| `/api/v1/ops/*` | Operations JSON API | Staff token + permission | `routes/api.php` |
+| — | Console | Not routable | `routes/console.php` |
 
 Separate prefixes exist so that authorization, rate limiting, caching and
 indexability are set per family rather than per route (TRD TR-29).
+
+**Two authenticated paths sit inside the public prefix**: `/saved` and
+`/b/{business}/review`. The IA fixes those URLs, so the rule is applied one
+level down: **each route declares its own requirement set**, and the family
+supplies the default. A public-prefix route that needs a session or a
+non-indexable response declares it in the route file beside its path, and the
+declaration is the thing the authorization middleware reads. Indexability
+follows the same declaration, so `/saved`, `/nearby`, `/search` and the review
+form are never marked indexable by accident.
 
 ---
 
@@ -282,8 +347,10 @@ outermost: the request travels down to the handler and the response bubbles
 back up. A middleware may short-circuit by returning without calling
 `$next`.
 
-Phase 1 ships exactly one — `SecureHeaders`. V1 adds, in outermost-first
-order:
+**The pipeline is not yet in place.** Security headers are currently set by
+`public/.htaccess`, which is host-level and is not enough (APP-7.2). The M1
+work builds the pipeline, `SecureHeaders` first, and moves the headers to the
+application layer. V1 then adds, in outermost-first order:
 
 | Middleware | Responsibility |
 | --- | --- |
@@ -295,7 +362,9 @@ order:
 | Surface | Detect and validate the Telegram Mini App context; mark the surface on the request |
 | Authorization | Per-route permission requirement for `/ops/*` and account routes |
 
-**The mechanism exists in Phase 1; V1 supplies the policies.**
+**Order is a security property, not a convenience.** Authorization runs after
+the session it depends on and before the handler it protects; nothing that
+can reject a request runs after something that can leak from it.
 
 ---
 
@@ -313,8 +382,10 @@ same service back a web page, an API endpoint and a console command.
 
 Domain objects hold the rules and perform no I/O: listing state transitions,
 review state transitions, campaign eligibility, rating computation, ranking
-inputs, value objects such as opening hours and coordinates. Time enters
-through an injected clock, as `Services` already provides.
+inputs, value objects such as opening hours and coordinates. **Time enters
+through an injected clock** (`Bulbula\Backend\Support\Clock`, TR-05, TST-2.4)
+— a domain rule that reads `time()` directly cannot be tested against a
+boundary, and every date-sensitive rule in this system has a boundary to test.
 
 ```text
 HomeController ─▶ DiscoveryService ─▶ Listing (domain) ─▶ ListingRepository ─▶ Connection
@@ -329,17 +400,22 @@ HomeController ─▶ DiscoveryService ─▶ Listing (domain) ─▶ ListingRep
 
 MariaDB through PDO. No ORM, no query builder, no Active Record.
 
-- `DatabaseConfig` is built from `config/database.php` (driven by `DB_*`
-  variables) and produces the DSN and PDO options: exceptions on error,
-  associative fetch, native prepared statements, `utf8mb4`.
-- `ConnectionFactory` is the only place that calls `new PDO`.
-- `Connection` opens lazily and exposes `select()`, `selectOne()`,
-  `execute()`, `statement()`, `transaction()` and `ping()`. Every query is
-  prepared with bound parameters; input is never interpolated into SQL.
-- `transaction()` commits on success, rolls back on any throwable and
-  rethrows — no silent swallowing.
-- PDO failures become `DatabaseException` naming the driver and database but
-  never the user, password or DSN. The password is marked
+- `config/database.php` (driven by `DB_*` variables) carries the DSN inputs
+  and the charset; `Bulbula\Backend\Database\ConnectionFactory` builds the
+  PDO options: exceptions on error, associative fetch, stringify off, and
+  `ATTR_EMULATE_PREPARES => false` — native prepared statements, so escaping
+  is the server's job and never ours.
+- `ConnectionFactory` is the **only** place that calls `new PDO`, and it is
+  driver-aware: MySQL and the test suite's in-memory SQLite take different
+  options because they are different engines.
+- `Connection` opens **lazily** and exposes `pdo()` and `ping()`. Lazy matters
+  for more than speed: a readiness probe must be able to report a database
+  outage instead of dying with it.
+- `select()`, `selectOne()`, `execute()`, `statement()` and `transaction()`
+  arrive with the first repositories (M2). `transaction()` commits on success,
+  rolls back on any throwable and rethrows — no silent swallowing.
+- PDO failures become `DatabaseException` (M2) naming the driver and database
+  but never the user, password or DSN; the password is marked
   `#[\SensitiveParameter]` so it is redacted in traces.
 
 V1 adds **repositories** above this: one per aggregate, owning its tables,
@@ -358,12 +434,18 @@ Files live in `database/migrations/` named
 `YYYY_MM_DD_HHMMSS_description.php`, each returning an anonymous class
 extending `Migration` with `up(Connection)` and `down(Connection)`.
 
+**Not yet in place.** No migration file, locator, repository, migrator or
+console command exists yet; the first migration arrives with the first product
+table (M2). The conventions below are fixed now so that the first one is not
+invented under pressure:
+
 `MigrationLocator` discovers files in filename order, `MigrationRepository`
 owns the `migrations` tracking table (`migration` primary key, `batch`,
 `executed_at`) and `Migrator` applies or reverts them. A batch records each
 migration with the same batch number; a rollback reverts the last batch, or
 the last *n* with `--steps=n`. DDL is never wrapped in a transaction, because
-MariaDB commits implicitly on DDL.
+MariaDB commits implicitly on DDL. Migrations are **forward-only** once
+shipped: a correction is a new migration, never an edit to an applied one.
 
 ```bash
 php bin/console migrate              # apply everything pending
@@ -385,7 +467,7 @@ php bin/console rollback --steps=2   # revert the last two batches
 | Success | HTML, or operational JSON | JSON |
 | Errors | `text/plain` or an HTML error page | JSON `{"error": {...}}` |
 
-`Request::expectsJson()` decides the error format: true for any path under
+`Request::wantsJson()` decides the error format: true for any path under
 `/api/`, a JSON content type, or a JSON `Accept` header. That is the single
 place where the distinction lives; controllers never branch on it.
 
@@ -397,39 +479,61 @@ for progressive-enhancement fetches, and for the later Flutter client.
 
 ## 12. Error handling
 
-`HttpErrorHandler` sits between the kernel and `ErrorHandler`. `HttpException`
-subclasses (`NotFoundException`, `MethodNotAllowedException`,
-`MalformedRequestException`) carry their own status and render as-is. Any
-other throwable is reported through `ErrorHandler` (logged with a reference
-id) and rendered as a 500: full detail while debugging, an opaque message
-plus the reference id in production. Controllers contain no try/catch for
-this — they throw, the kernel renders.
+`Kernel::handle` owns the whole error path, and `ErrorRenderer` renders it in
+one place. `HttpException` is abstract and its subclasses —
+`HttpNotFoundException`, `MethodNotAllowedException`, `ServerErrorException`,
+`ValidationException` — carry their own status, headers and, for validation,
+field-level detail. Anything else is a 500: full detail while debugging, an
+opaque message plus the reference id in production. **Controllers contain no
+try/catch for this** — they throw, the kernel renders.
 
-V1 adds a validation failure type that carries field-level detail for forms
-and for the API envelope, and user-facing copy that offers a route forward.
+- JSON callers get `{"error": {"code", "message", "request_id"}}`; stack
+  traces, SQL and file paths appear only when debug is on, and
+  `config/app.php` forces debug off in production whatever `.env` says.
+- HTML callers get a readable page with a route forward, and the same
+  reference id.
+- **A 404 for something that exists but is not yours is the same 404 as for
+  something that does not exist.** Existence is information.
+
+Logged through `error_log()` on purpose: the logger itself may be the thing
+that failed, and an error path must not depend on the system it reports on.
 
 ---
 
 ## 13. Health checks
 
-| Endpoint | Checks | Depends on the database |
-| --- | --- | --- |
-| `GET /health`, `GET /api/v1/health` | process is alive | no |
-| `GET /health/ready`, `GET /api/v1/health/ready` | `ping()` + tracking table readable | yes |
+| Endpoint | Checks | Depends on the database | Status |
+| --- | --- | --- | --- |
+| `GET /health`, `GET /api/v1/health` | process is alive and can answer; no dependency is touched | no | **Built** |
+| `GET /health/ready`, `GET /api/v1/health/ready` | a real `ping()` round-trip, and a writable `storage/logs/` | yes, for the readiness answer only | **Built** |
 
-Liveness must never depend on the database, otherwise a blip triggers a
-restart of a healthy process. Readiness returns `503` with per-check detail.
-Both send `Cache-Control: no-store`. V1 extends readiness with storage
-writability.
+Liveness must never depend on the database, otherwise a blip triggers a restart
+of a healthy process; it answers `200 {"status":"pass"}` and nothing else.
+Readiness answers `200 {"status":"pass","checks":{"database":"ok","storage":"ok"}}`
+or `503 {"status":"fail","checks":{…}}` with per-check detail, and sends
+`Cache-Control: no-store`. Both are served from `routes/health.php` by one
+controller and one `HealthChecker` in `backend/Support/Health/`, and a tracking
+table is added to the readiness check when the migrations create one.
+
+The readiness answer is honest rather than convenient: with no database
+reachable it returns `503` and `{"checks":{"database":"error"}}` instead of a
+200 that would fail the first real request. Neither probe discloses anything
+about the deployment — no versions, hosts, paths or credentials.
 
 ---
 
 ## 14. Document root
 
-Only `public/` is web accessible. `src/`, `config/`, `database/`,
-`resources/`, `routes/`, `tests/`, `vendor/`, `composer.json`,
+Only `public/` is web accessible. `backend/`, `frontend/`, `api/`, `admin/`,
+`config/`, `database/`, `routes/`, `tests/`, `vendor/`, `composer.json`,
 `composer.lock`, `storage/` and `.env` stay above it, and a feature test
 asserts that the document root holds a single executable entry point.
+
+Two `.htaccess` files assume the docroot will one day be misconfigured: the
+repository root denies everything, and `storage/` denies everything. A site
+pointed at the repository root returns 403 for its whole tree instead of
+serving configuration, migrations or uploads. **Do not edit either file to
+"make the site work" — fix the docroot instead.**
 Uploaded media is stored outside the document root and served through an
 adapter or an explicit endpoint. Deployment details are in
 [deployment.md](deployment.md).
@@ -438,13 +542,20 @@ adapter or an explicit endpoint. Deployment details are in
 
 ## 15. Security posture
 
-- `SecureHeaders` sets a restrictive CSP, `X-Content-Type-Options`,
-  `X-Frame-Options`, `Referrer-Policy` and `Permissions-Policy` on every
-  response; HSTS is added only over HTTPS. The Mini App needs a
-  `frame-ancestors` policy admitting the Telegram host — **Open (TRD
+- Security headers — restrictive CSP, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and HSTS over
+  HTTPS — are set by `public/.htaccess` today and move to a `SecureHeaders`
+  middleware at M1 (APP-7.2: they must survive a host change). The Mini App
+  needs a `frame-ancestors` policy admitting the Telegram host — **Open (TRD
   OT-05)**.
-- JSON is encoded with `HEX_TAG|HEX_AMP|HEX_APOS|HEX_QUOT`, so a response
-  embedded in HTML cannot break out of its context.
+- JSON is encoded with `JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS |
+  JSON_HEX_QUOT`, so a response embedded in an HTML attribute or a script
+  context cannot break out of it, plus `JSON_UNESCAPED_SLASHES |
+  JSON_UNESCAPED_UNICODE` so URLs and non-ASCII text stay readable, and
+  `JSON_THROW_ON_ERROR` so invalid UTF-8 fails loudly instead of emitting an
+  empty body. The recorded deviation of the first pass is **closed**; the
+  encoder is `Response::json()` and the rule is held by
+  `tests/Unit/Backend/Core/ResponseTest.php`.
 - Malformed JSON bodies and unsupported methods are rejected before any
   handler runs.
 - Credentials are never logged, never placed in an exception message and
@@ -467,9 +578,9 @@ to `docs/50-security/` in a later phase.
 | Log level | `debug` | `warning` or higher (recommended) |
 | Database | in-memory SQLite for tests | MariaDB |
 
-`Application::isDebug()` combines configuration with the environment, so
-`APP_DEBUG=true` in production still yields `false`. Debug output cannot be
-switched on by accident.
+`config/app.php` combines configuration with the environment — debug is
+forced `false` when `APP_ENV=production`, whatever `.env` says. Debug output
+cannot be switched on by accident on a live site.
 
 ---
 
@@ -477,7 +588,7 @@ switched on by accident.
 
 | Not added | Why |
 | --- | --- |
-| A framework, service container or auto-wiring | Standing rule; enforced by tests |
+| A framework, or a service locator inside application code | Standing rule, with no exception: the composition root constructs everything by hand and `BoundariesTest` fails if a container returns |
 | An ORM or query builder | Enforced by tests |
 | A SPA or front-end framework | Server-rendered requirement (C-37, D-52) |
 | A search cluster | MariaDB-backed search is the V1 baseline |

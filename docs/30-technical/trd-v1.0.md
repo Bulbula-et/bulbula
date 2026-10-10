@@ -11,6 +11,15 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | `docs/architecture.md` and `docs/deployment.md` as the top-level technical reference (both relocated to `docs/30-technical/`) |
 
+> **Structure amendment — 2026-10-11.** This document has been reconciled with
+> the application as built: the surface-first layout (`frontend/ api/ admin/
+> backend/`), the namespace map, the toolchain in use and the outbound-HTTP
+> boundary. The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement was removed or weakened by this amendment**; where a control is
+> not yet in place it is marked **not yet in place** and the milestone that
+> delivers it is named.
+
 ### 1.1 Purpose
 
 The TRD is the technical equivalent of the PRD. It translates the approved
@@ -80,7 +89,7 @@ implementation
 | --- | --- | --- |
 | G-1 | Deliver all 40 approved capabilities (C-01…C-40) on one backend serving two client surfaces | D-01, D-49 |
 | G-2 | Run correctly and affordably on low-cost shared hosting, with no mandatory external infrastructure service for core operation | PRD NFR-SC1, deployment reality |
-| G-3 | Stay framework-free plain PHP, extending the Phase 1 foundation rather than replacing it | Standing architectural rule; `tests/Arch/ArchTest.php` |
+| G-3 | Stay framework-free plain PHP, extending the built foundation rather than replacing it | Standing architectural rule; architecture assertion (`tests/Arch/DependenciesTest`) |
 | G-4 | Serve fast, crawlable, server-rendered HTML on mid-range Android devices over constrained networks | D-52, C-37, PRD NFR-P1 |
 | G-5 | Keep one implementation of every domain rule, shared by Web, the Telegram Mini App and any later client | D-49, PRD FL-2 |
 | G-6 | Make listing provenance, verification and every privileged action auditable by construction | C-21, C-29, D-50 |
@@ -148,10 +157,14 @@ This materially reduces the V1 attack surface and simplifies authorization
 
 ---
 
-## 6. Existing foundation
+## 6. Foundation
 
-Phase 1 delivered a working, tested, framework-free foundation. **V1 extends
-it; it does not replace it.** The TRD takes the following as given.
+The framework-free foundation is built and running: one web entry point, a
+request/response kernel, a router, configuration, logging, error rendering, a
+lazy database connection and a readiness probe. **V1 extends it; it does not
+replace it.** The layout is the surface-first one described in
+[`docs/70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md),
+which is the authority for where a file goes.
 
 ### 6.1 Runtime and dependencies
 
@@ -159,90 +172,106 @@ it; it does not replace it.** The TRD takes the following as given.
 | --- | --- |
 | Language | PHP `^8.4` (`composer.json`) |
 | Required extensions | `ext-pdo`, `ext-pdo_mysql` |
-| Autoloading | PSR-4, `Bulbula\` → `src/` |
+| Autoloading | PSR-4, one root per surface — `Bulbula\Frontend\` → `frontend/`, `Bulbula\Api\` → `api/`, `Bulbula\Admin\` → `admin/`, `Bulbula\Backend\` → `backend/` |
 | Runtime libraries | `nikic/fast-route`, `monolog/monolog`, `psr/log`, `vlucas/phpdotenv` — four, all single-purpose |
 | Database | MariaDB via PDO, `utf8mb4` / `utf8mb4_unicode_ci` |
 | Test database | In-memory SQLite (`ext-pdo_sqlite`, dev only) |
 
-### 6.2 Directory layout (unchanged)
+### 6.2 Directory layout
 
 ```text
+admin/                 Bulbula\Admin\ — operations console: controllers, views
+api/                   Bulbula\Api\ — JSON v1: controllers, requests, resources
+backend/               Bulbula\Backend\ — the application (§6.3)
 bin/console            CLI entry point (migrate, rollback, migration:status)
-config/                app.php, database.php, logging.php — arrays from env
-database/migrations/   ordered, reversible migrations
+config/                app.php, database.php, security.php, logging.php, mail.php — arrays from env
+database/migrations/   ordered, forward-only migrations
+database/reference/    curated catalogue data, not schema (D-56)
 docs/                  documentation
+frontend/              Bulbula\Frontend\ — public pages: controllers, views
 public/                document root: index.php, .htaccess, assets
-resources/views/       templates, outside the document root
-routes/                web.php, api.php
-src/                   PSR-4 source
-storage/               runtime artefacts (logs), git-ignored contents
-tests/                 Unit, Feature, Arch
+routes/                web.php, api.php, admin.php, console.php
+storage/               runtime artefacts (logs, cache, uploads) — contents git-ignored
+tests/                 Unit, Feature, Arch, Support (§6.4)
 ```
+
+Views live with their surface (`frontend/Views/`, `admin/Views/`) rather than in
+a shared `resources/` tree, so a template cannot drift away from the surface
+allowed to render it.
 
 ### 6.3 Existing components
 
+The backend is layered, and each layer is a namespace a reviewer can hold in
+mind at once.
+
 | Namespace | Responsibility | V1 impact |
 | --- | --- | --- |
-| `Bulbula\Foundation` | `Application` composition root, `Environment`, `Services`, `HttpKernelFactory` | Extended with new services |
-| `Bulbula\Config` | Immutable dot-notation config repository | Extended with new config files |
-| `Bulbula\Http` | Request, Response, Status, Method, Kernel, emitter, error handler | Extended with middleware |
-| `Bulbula\Http\Routing` | Route registration, FastRoute matching, named URLs | Extended with new routes |
-| `Bulbula\Http\Middleware` | Contract, `Pipeline`, `SecureHeaders` | Extended (§15, §34) |
-| `Bulbula\Http\Controller` | Thin HTTP boundary | Extended per capability |
-| `Bulbula\Database` | `Connection`, `ConnectionFactory`, `DatabaseConfig`, exceptions | Reused as-is |
-| `Bulbula\Database\Migrations` | Locator, repository, migrator | Reused as-is (§31) |
-| `Bulbula\Console` | Command runner behind `bin/console` | Extended with scheduled commands (§28) |
-| `Bulbula\Diagnostics` | Health checks and report | Reused; extended checks |
-| `Bulbula\Logging` | PSR-3 Monolog factory | Reused (§26) |
-| `Bulbula\View` | `PageRenderer` for static pages | Replaced or extended by the view layer — **Open (D-17)** |
-| `Bulbula\Error`, `Bulbula\Exception`, `Bulbula\Support` | Error promotion, configuration failures, typed env reader | Reused as-is |
+| `Bulbula\Backend\Core` | Composition root, environment, configuration, request, response, router, controller factories, kernel, view, error rendering | Extended with middleware, validation and pagination primitives |
+| `Bulbula\Backend\Database` | PDO connection, connection factory, migration machinery | Extended with the query helpers repositories need |
+| `Bulbula\Backend\Exceptions` | Typed failures, including the HTTP exceptions the kernel renders | Extended per capability |
+| `Bulbula\Backend\Support` | Clock, identifiers, logger factory, template helpers | Extended |
+| `Bulbula\Backend\Security` | Sessions, CSRF, permission checks, rate limiting, audit trail | Grown through V1 (§14, §15, §34) |
+| `Bulbula\Backend\Integrations` | Outbound HTTP — the one namespace that owns a transport (TD-07) | **Not yet in place**; created with the first outbound call (§23) |
+| `Bulbula\Backend\Mail` | Message composition and delivery state | Grown through V1 (§21) |
+| `Bulbula\Backend\Console\Commands` | Scheduled and manual jobs behind `bin/console` | Extended with scheduled commands (§28) |
+| `Bulbula\Backend\Domain\{Area}` | Entities, value objects and rules — one folder per bounded area (§11) | The product |
+| `Bulbula\Backend\Repositories\{Area}` | SQL, one repository per aggregate | The product |
+| `Bulbula\Backend\Services\{Area}` | Application services, one method per meaningful operation | The product |
 
-### 6.4 Constraints the architecture tests already enforce
+The areas are the six of §11 — Directory, Operations, Identity, Community,
+Advertising, Platform — with Search and Media sitting beside them in the same
+three layers. A capability therefore lives in three known places
+(`Domain/{Area}`, `Services/{Area}`, `Repositories/{Area}`) plus the surface
+that presents it, which is what makes both TR-16 and "where does this file go?"
+answerable without asking.
 
-These are not aspirations; `tests/Arch/ArchTest.php` fails the build on
-violation, and **V1 code must satisfy them**:
+### 6.4 Constraints the architecture tests enforce
+
+These are not aspirations: the architecture suite fails the build on violation,
+and **V1 code must satisfy them**. The suite lives at `tests/Arch/` and is in
+place: every rule below is asserted today, and a rule a new slice needs is
+asserted in the change that adds the slice.
 
 | Enforced rule | Consequence for V1 design |
 | --- | --- |
 | No framework namespaces (`Illuminate`, `Laravel`, `Symfony\Component\HttpKernel`, `Laminas`, `Mezzio`, `Slim`, `Flight`) | New capabilities use plain PHP and the four approved libraries |
-| No ORM or DBAL (`Doctrine`, `Illuminate\Database`, `Propel`, `Cycle`) | Repositories issue SQL through `Connection` |
-| `PDO`, `PDOStatement`, `PDOException`, `mysqli`, `curl_init` only inside `Bulbula\Database` | **External HTTP calls must be wrapped**, see TD-07 below |
-| `Bulbula\Http` contains no SQL | Controllers and middleware never query |
-| Controllers never use `Bulbula\Database` or `PDO` | Controllers depend on application services only |
+| No ORM or DBAL (`Doctrine`, `Illuminate\Database`, `Propel`, `Cycle`) | Repositories issue SQL through `Bulbula\Backend\Database\Connection` |
+| `PDO`, `PDOStatement`, `PDOException`, `mysqli` only inside `Bulbula\Backend\Database` | Persistence has one door |
+| `curl_init` and its family only inside `Bulbula\Backend\Integrations` (TD-07) | **External HTTP calls must be wrapped** — see TD-07 below |
+| No SQL in `Bulbula\Backend\Core` or in any surface namespace | Controllers and middleware never query |
+| Controllers never use `Bulbula\Backend\Database` or `PDO` | Controllers depend on application services only |
 | Controllers are suffixed `Controller`; HTTP exceptions suffixed `Exception` | Naming is mandatory |
-| `Bulbula\Database` independent of `Http`, `View`, `Console` | Data access is presentation-agnostic |
-| Service namespaces independent of `Http`, `View`, `Console` | Domain and application services are HTTP-free |
-| `Bulbula\View` uses no database, no HTTP, no PDO | Views receive prepared data only |
-| `Env` is used only inside `Bulbula\Config`; `Http`/`Database`/service layers never read superglobals or `getenv` | All settings arrive through `Config` |
-| All source classes are `final`, strict types everywhere; `Request`, `Response`, `DatabaseConfig` readonly | Value objects are immutable |
+| `Bulbula\Backend\Domain` and `Bulbula\Backend\Services` are independent of the HTTP layer and of every surface namespace | Domain and application services are HTTP-free and surface-agnostic |
+| `Bulbula\Backend\Core\View` touches no database, no HTTP, no PDO | Views receive prepared data only |
+| `Env` is read only inside `Bulbula\Backend\Core`; nothing else reads superglobals or `getenv` | All settings arrive through `Config` |
+| Every SQL statement lives in `Bulbula\Backend\Repositories\{Area}` | There is one place to look for a query |
+| All source classes are `final`, strict types everywhere; value objects readonly | Immutability by default |
 | No `dd`, `dump`, `die`, `var_dump`, `sleep`, `exit` in source | `bin/console` is the only file that may `exit()` |
 
-**TR-01.** Every new namespace introduced in V1 **MUST** be placed on the
-correct side of these boundaries, and the architecture test suite **MUST** be
-extended to cover the new namespaces rather than leaving them unguarded.
+**TR-01.** Every area or layer introduced in V1 **MUST** be covered by an
+architecture assertion in the same change that creates it, so the boundary is
+guarded from its first commit rather than after the fact (IMP-4.3).
 
-**TD-07 — Outbound HTTP is a wrapped capability, not an ambient one.** The
-enforced rule above confines `curl_init` to `Bulbula\Database`, which was
-written for a system whose only outbound dependency was MariaDB. V1 adds
+**TD-07 — Outbound HTTP is a wrapped capability, not an ambient one.** V1 adds
 genuine outbound calls: Google token verification (§14), the email provider
-(§21, D-41), and the Telegram Bot API (§23, D-33). Rather than relax the
-architecture test, V1 introduces a **single outbound HTTP gateway** —
-one narrow namespace that owns the transport, and the only place where a
-client library may live. Every integration depends on an interface it
-provides, never on the transport directly.
+(§21, D-41) and the Telegram Bot API (§23, D-33). Rather than let a transport
+appear wherever one is needed, `Bulbula\Backend\Integrations` is the **single
+namespace that owns outbound HTTP** — the only place where a transport or a
+client library may live. Every integration depends on an interface it provides,
+never on the transport directly.
 
 | TR | Requirement | Source |
 | --- | --- | --- |
-| TR-01a | Exactly **one** namespace **MUST** own outbound HTTP; every other namespace reaches it through an interface | TD-07 |
-| TR-01b | The architecture test **MUST** be extended to name that namespace, so the confinement stays enforced rather than widened | TR-01 |
+| TR-01a | Exactly **one** namespace — `Bulbula\Backend\Integrations` — **MUST** own outbound HTTP; every other namespace reaches it through an interface | TD-07 |
+| TR-01b | An architecture assertion **MUST** name that namespace, so the confinement is enforced rather than assumed | TR-01 |
 | TR-01c | Every outbound call **MUST** have a timeout, a bounded retry policy, and a defined degraded behaviour when the dependency is unavailable | TR-205 |
 | TR-01d | **No outbound HTTP call may occur in a page-render path** (TR-205). Outbound work belongs in console commands and queued jobs (TD-06) | TR-205, TD-06 |
 | TR-01e | Credentials for outbound calls arrive from configuration only (TR-189) and **MUST NOT** appear in logs (TR-25) | TR-189 |
 
-**Relaxing the architecture test to allow `curl_init` anywhere is
-explicitly rejected.** The rule is weakened by that change, and weakening
-an enforced boundary to accommodate a foreseeable requirement is the
-failure mode the boundary exists to prevent.
+**Relaxing the confinement to allow a transport anywhere is explicitly
+rejected.** The rule is weakened by that change, and weakening an enforced
+boundary to accommodate a foreseeable requirement is the failure mode the
+boundary exists to prevent.
 
 ---
 
@@ -348,7 +377,7 @@ canonical component map is in [`architecture.md`](architecture.md).
 | ID | Rule |
 | --- | --- |
 | TR-03 | A controller (3, 4) **MUST** contain no business rules, no SQL and no HTML construction; it validates shape, calls one application service, and renders |
-| TR-04 | An application service (6) **MUST** be callable from Web, API and CLI without modification, and **MUST NOT** reference `Bulbula\Http` |
+| TR-04 | An application service (6) **MUST** be callable from Web, API and CLI without modification, and **MUST NOT** reference `Bulbula\Backend\Core` or any surface namespace |
 | TR-05 | Domain logic (7) **MUST** be free of I/O: no database, no filesystem, no network, no clock access except through an injected clock |
 | TR-06 | A repository (8) **MUST** be the only path to its aggregate's tables; no other component issues SQL against them |
 | TR-07 | External services (Google, email, storage, Telegram, maps) **MUST** be reached through an adapter interface defined by the application layer, with the concrete adapter constructed in the composition root |
@@ -364,17 +393,19 @@ canonical component map is in [`architecture.md`](architecture.md).
 Apache (public/.htaccess)
   └─ rewrite non-file, non-directory → public/index.php
        └─ pre-boot guards        PHP version, vendor/autoload.php present
-       └─ Application::boot()    .env → Config → Environment → timezone → logger → error handler
-       └─ Services::for…()       explicit construction of shared collaborators
-       └─ HttpKernelFactory      Router ← routes/web.php, routes/api.php
+       └─ Application::boot()    .env → Config → timezone → error handler
+                                 → route families → collaborators, by hand
        └─ Request::fromGlobals()
        └─ Kernel::handle()
-             ├─ global pipeline   SecureHeaders → RequestId → Session → …
-             ├─ Router::match()   FastRoute: found | 405 | 404
-             ├─ route pipeline    auth, CSRF, rate limit, surface adapter
-             └─ handler           controller → application service → domain → repository
-       └─ ResponseEmitter::emit()
+             ├─ correlation id    X-Request-Id on every response, including failures
+             ├─ Router::match()   FastRoute: found | 405 (Allow) | 404
+             ├─ handler           controller built by its factory, or a closure
+             └─ errors            HttpException and anything else → ErrorRenderer
+       └─ Response::send()
 ```
+
+**Not yet in place:** the middleware pipeline (global and per-route) and
+`SecureHeaders`; see §34 and architecture §7.
 
 ### 10.2 API (JSON) request
 
@@ -735,7 +766,7 @@ Placement (named slot) ──▶ delivery selection ──▶ labelled render �
 
 **View layer — Open (D-17).** Whether the template layer is in-house or a
 small library is unresolved. **TR-107:** whichever is chosen **MUST** satisfy
-the architecture test that `Bulbula\View` touches neither the database nor
+the architecture assertion that `Bulbula\Backend\Core\View` touches neither the database nor
 HTTP, and **MUST** escape by default.
 
 **Client-side approach — Open (D-16).** htmx + Alpine versus vanilla ES
@@ -927,7 +958,7 @@ Authority: [`deployment.md`](deployment.md). Architectural constraints:
 | --- | --- |
 | TR-182 | One deployable unit: the repository, installed on a host that serves `public/` only |
 | TR-183 | The repository is the source of truth. Nothing a deployed environment needs may exist only on a server |
-| TR-184 | The document root **MUST** be `public/`; `src/`, `config/`, `database/`, `resources/`, `routes/`, `tests/`, `vendor/`, `.env` stay above it |
+| TR-184 | The document root **MUST** be `public/`; `backend/`, `frontend/`, `api/`, `admin/`, `config/`, `database/`, `routes/`, `tests/`, `vendor/`, `storage/` and `.env` stay above it |
 | TR-185 | `vendor/` is built on the server with `--no-dev --optimize-autoloader` and is never committed |
 | TR-186 | Secrets live in `.env` on the server, created from `.env.example`, never committed, never logged |
 | TR-187 | Deployment **MUST** be repeatable and rollback-able to a previous commit; `git reset --hard` semantics mean server-side edits are always lost, which is intended |
@@ -942,7 +973,7 @@ Authority: [`deployment.md`](deployment.md). Architectural constraints:
 
 | ID | Requirement |
 | --- | --- |
-| TR-192 | Configuration is read exclusively through the `Config` repository; only `Bulbula\Config` may read the environment, as the architecture test enforces |
+| TR-192 | Configuration is read exclusively through the `Config` repository; only `Bulbula\Backend\Core` may read the environment, as the architecture assertion enforces |
 | TR-193 | Every new setting **MUST** have a documented default in `config/*.php` and an entry in `.env.example` with a placeholder value |
 | TR-194 | The application **MUST** fail loudly at boot on invalid or missing required configuration, rather than running with a silent fallback |
 | TR-195 | `APP_DEBUG` **MUST** remain incapable of enabling debug output in production, as `Application::isDebug()` already guarantees |
@@ -968,15 +999,15 @@ to `docs/50-security/` in a later phase and **MUST NOT** be pre-empted here.
 | **Output encoding** | Escape by default in templates; JSON encoded with the existing hex flags so a response embedded in HTML cannot break context | Existing foundation |
 | **CSRF** | All state-changing HTML form submissions protected by a per-session token; API token-authenticated requests are not cookie-authenticated and therefore not CSRF-exposed | TD-02 |
 | **Rate limiting** | Applied to authentication, OTP issuance, review submission, report submission and search; limits are configuration (TR-196); responses **MUST NOT** disclose thresholds | C-15, C-31, AB-2 |
-| **SQL** | Prepared statements with bound parameters only; no string interpolation of input; `PDO` confined to `Bulbula\Database` | Existing architecture test |
+| **SQL** | Prepared statements with bound parameters only; no string interpolation of input; `PDO` confined to `Bulbula\Backend\Database` | Architecture assertion — in place (`tests/Arch/BoundariesTest`) |
 | **File uploads** | Staff-only; content-inspected; allow-listed image types; size-bounded; stored outside the document root; never executable | TR-80, TR-81 |
 | **Media validation** | Re-encode or verify derivatives rather than trusting the uploaded bytes | TR-82 |
 | **Secure headers** | The existing `SecureHeaders` middleware applies CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`; the Mini App requires a frame-ancestors policy that permits the Telegram host — **Open — technical decision (OT-05)** | Existing foundation, D-49 |
 | **Error handling** | Opaque in production with a reference id; no stack traces, no SQL, no paths | §27 |
 | **Audit logging** | Every privileged action recorded with actor, action, target, time and reason; append-only; unwritable audit means the action fails | C-29, TR-08 |
 | **Privileged actions** | Administrator-only operations gated by named permission and audited | TR-36 |
-| **Secrets** | Never in Git, logs or error output; `.gitleaks.toml` scanning is already part of CI | TR-198 |
-| **Dependencies** | `composer audit` in CI; the dependency surface stays deliberately small | Existing CI |
+| **Secrets** | Never in Git, logs or error output; `.gitleaks.toml` scanning runs in `security.yml` over the full history, and locally as `gitleaks git .` | TR-198 |
+| **Dependencies** | `composer audit` before each release; the dependency surface stays deliberately small | Release checklist |
 
 ---
 
@@ -1060,7 +1091,7 @@ verifiable.
 ```text
 Given the V1 codebase
 When the full quality gate runs
-Then composer validate, Rector, Pint, PHPStan at max, Pest, type coverage
+Then composer validate, Pint, PHPStan at max, PHPUnit
      and the architecture suite all pass
 And coverage and mutation thresholds are not lower than Phase 1's.
 ```

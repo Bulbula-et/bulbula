@@ -9,6 +9,12 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built. The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement, threshold or header was weakened**; what is not wired up yet is
+> marked **not yet in place**, with the milestone that delivers it.
+
 ## Scope
 
 Operational security for V1: production access, staff accounts, audit,
@@ -123,7 +129,7 @@ over one that is ideal and performed never.
 | SO-6.2 | Dependency updates are **proposed automatically and reviewed by a person** | APP-8.4 |
 | SO-6.3 | A security update to a directly used package is applied **promptly**, with the full gate run before deployment | SO-6.5 |
 | SO-6.4 | The **PHP version and platform patches are the host's responsibility**; the team tracks the host's PHP version and does not run an end-of-life PHP | SO-1.1 |
-| SO-6.5 | **No update is deployed without the complete quality gate passing** — validate, Rector, Pint, PHPStan, tests, coverage, type coverage | Standing instruction |
+| SO-6.5 | **No update is deployed without the complete quality gate passing** — Pint, PHPStan level max, tests, and coverage, type coverage and mutation score once they are wired. The gate is never bypassed on a live site, and a missing control is fixed, not waived | Standing instruction |
 | SO-6.6 | **No threshold is lowered and no mutant is suppressed** to make an update pass | Standing instruction |
 | SO-6.7 | **Abandoned packages are a security finding** and are tracked to replacement | APP-8.5 |
 | SO-6.8 | Patch urgency is judged by the severity model (IR §3) and by whether Bulbula's code reaches the vulnerable path | SEV |

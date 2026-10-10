@@ -9,6 +9,13 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built: the surface-first layout, the namespace map and the toolchain in use.
+> The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement was removed or weakened**; what is not yet built is marked **not
+> yet in place** with the milestone that delivers it.
+
 **Purpose.** The client-platform architecture for the two V1 surfaces, the
 boundaries between shared and surface-specific code, and the platform
 decision register (`PD-xx`) introduced by this phase.
@@ -107,7 +114,7 @@ restated or revised here.
 | PA-2.4 | **This inventory is closed.** A tenth concern requires an owner decision in the register |
 | PA-2.5 | Every entry changes *how* a capability is reached, never *what* it means — the formal rule is in [`shared-client-contract-v1.0.md`](shared-client-contract-v1.0.md) §3 |
 | PA-2.6 | Telegram-specific calls live in the Telegram adapter only, never in product code | TR-110 |
-| PA-2.7 | The adapter corresponds to the `Bulbula\Telegram` namespace already indicated by the architecture | `architecture.md` |
+| PA-2.7 | The adapter corresponds to the server-side `Bulbula\Backend\Integrations\Telegram` namespace, plus the single client-side adapter script (`public/assets/js/`), which is the **only** JavaScript file permitted to reference the host | `architecture.md` §3.1 |
 
 ### 2.3 State boundaries
 
@@ -272,7 +279,7 @@ decision instead (see §11).
 
 | | |
 | --- | --- |
-| **Decision** | All surface-specific behaviour lives behind one adapter boundary, corresponding to the `Bulbula\Telegram` namespace for Mini App concerns. Product code never inspects the surface. |
+| **Decision** | All surface-specific behaviour lives behind one adapter boundary, corresponding to the `Bulbula\Backend\Integrations\Telegram` namespace (server) and one adapter script (client) for Mini App concerns. Product code never inspects the surface. |
 | **Reason** | TR-110 requires confinement; scattered host calls are the main failure mode in Mini App codebases. |
 | **Impact** | Testable surface behaviour; a host change has a bounded blast radius. |
 | **Alternatives** | Inline host calls at point of use — rejected as unmaintainable and untestable. |

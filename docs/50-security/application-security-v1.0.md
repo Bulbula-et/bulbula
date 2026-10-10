@@ -9,6 +9,12 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built. The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement, threshold or header was weakened**; what is not wired up yet is
+> marked **not yet in place**, with the milestone that delivers it.
+
 ## Scope
 
 Secure development rules for the Bulbula application: input, SQL,
@@ -181,18 +187,24 @@ product decision.
 
 ## 7. HTTP security headers
 
-### 7.1 Current, shipped state
+### 7.1 Current state
 
-`src/Http/Middleware/SecureHeaders.php` already applies:
+The headers are set today by `public/.htaccess`, at the **host** layer:
 
-| Header | Value |
-| --- | --- |
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` (HTTPS requests only) |
-| `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `DENY` |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Permissions-Policy` | `geolocation=(), microphone=(), camera=()` |
-| `Content-Security-Policy` | `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'` |
+| Header | Value | Status |
+| --- | --- | --- |
+| `X-Content-Type-Options` | `nosniff` | Set by `.htaccess` |
+| `X-Frame-Options` | `DENY` | Set by `.htaccess` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Set by `.htaccess` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | Set by `.htaccess` |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` (HTTPS only) | **Not yet in place** |
+| `Content-Security-Policy` | `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'` | **Not yet in place** |
+
+**Why this is not good enough.** A header set by `.htaccess` disappears the
+day the site moves to a host whose configuration does not reproduce it, and
+the requirement is that they travel with the application. The `SecureHeaders`
+middleware is therefore M1 work, and it is where HSTS and the CSP are added —
+not invented here, and not skipped.
 
 | ID | Requirement | Source |
 | --- | --- | --- |
@@ -231,7 +243,7 @@ product decision.
 | APP-8.6 | A new dependency requires a justification: what it does, why it is not written in-house, its maintenance state and its licence | Standing instruction |
 | APP-8.7 | **No dependency is added that introduces a framework** | APP-1.1 |
 | APP-8.8 | Development dependencies are **not installed in production** |
-| APP-8.9 | **Secret scanning (`.gitleaks.toml`) stays in CI** and is not weakened | TR-198 |
+| APP-8.9 | **Secret scanning (`.gitleaks.toml`) is required and is not weakened.** **In place:** `security.yml` scans the full history on every pull request and push to `main`, and weekly; the config extends the default ruleset and disables nothing. A finding means the secret is rotated, not merely removed (`REL-3.7`) | TR-198 |
 | APP-8.10 | **No CI quality threshold is lowered and no mutant is suppressed** to accommodate a security change | Standing instruction |
 | APP-8.11 | Supply-chain posture for V1 is **lockfile + audit + review**. A signing or SBOM regime is **Future**, not a V1 requirement | SEC-6.2 |
 

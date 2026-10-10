@@ -9,6 +9,13 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built: the toolchain, the suite layout and the namespace map. The authority
+> for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> standard was lowered**; a control that is not wired up yet is marked **not
+> yet in place**, with the milestone that delivers it.
+
 ## Scope
 
 How a change travels from a branch to production: branching, review,
@@ -85,19 +92,21 @@ feature branch → pull request → CI gate → review → merge to main
 
 ### 3.1 Before a pull request
 
-`composer test` locally: `composer validate --strict` → Rector dry-run
-→ Pint check → PHPStan → Pest → type coverage.
+`composer check` locally: Pint check → PHPStan level max → PHPUnit. The full
+gate this document specifies adds `composer validate --strict`, Rector dry-run,
+type coverage and line coverage at `--min=100`, PHPInsights and Infection;
+those are **not yet wired** and are scheduled work, not optional extras.
 
 ### 3.2 On the pull request
 
-**`ci.yml`** — dependencies · coding-standards · static-analysis
-(PHPStan max, dependency matrix highest and lowest) · refactoring ·
-tests (matrix highest and lowest, `--bail`) · type-coverage (100 %) ·
-quality (PHPInsights) · code-coverage (100 %).
-**`security.yml`** — `composer audit --locked` and gitleaks over the
-tree and the full history.
+**`ci.yml`** — **in place** for the steps that exist today (manifest
+validity, coding-standards, static-analysis at PHPStan max, tests); the
+dependency matrix, Rector, type-coverage, PHPInsights and code-coverage jobs
+are still to wire.
+**`security.yml`** — **in place**: `composer audit --locked` and gitleaks over
+the tree and the full history.
 **`mutation.yml`** — runs on `main` and nightly; **does not gate the
-pull request**.
+pull request**. **Not yet in place.**
 
 | ID | Rule | Source |
 | --- | --- | --- |
@@ -198,7 +207,7 @@ pull request**.
 
 | ID | Rule | Source |
 | --- | --- | --- |
-| REL-7.1 | **Configuration is read exclusively through the `Config` repository; only `Bulbula\Config` may read the environment** | TR-192 |
+| REL-7.1 | **Configuration is read exclusively through the `Config` repository; only `Bulbula\Backend\Core` may read the environment** | TR-192 |
 | REL-7.2 | **Secrets live in `.env` on the server, created from `.env.example`, never committed, never logged** | SC-2, TR-186 |
 | REL-7.3 | **A new variable is added to `.env.example` in the same change that uses it**, or the deployment will fail at step 5 |
 | REL-7.4 | **Deployment verifies `.env` has every variable in `.env.example`** | `deployment.md` §7 step 5 |

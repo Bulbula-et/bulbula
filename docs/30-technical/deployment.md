@@ -9,6 +9,13 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | **`docs/deployment.md`** (Phase 1). That document is removed; its operational content is preserved here. |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built: the surface-first layout, the namespace map and the toolchain in use.
+> The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement was removed or weakened**; what is not yet built is marked **not
+> yet in place** with the milestone that delivers it.
+
 **Scope.** How Bulbula is deployed and run: the runtime, the document root,
 installation, configuration, secrets, migrations, the deployment sequence,
 rollback, permissions, storage, logs, health checks, backups, cron and
@@ -79,18 +86,21 @@ cryptically.
 
 ```text
 bulbula.et/                      <- repository root, NOT web accessible
-├── bin/ config/ database/ docs/ resources/ routes/ src/ tests/ vendor/
+├── admin/ api/ backend/ frontend/         <- application source
+├── bin/ config/ database/ docs/ routes/ tests/ tools/ vendor/
 ├── storage/                     <- runtime state, NOT web accessible
 ├── composer.json composer.lock .env
+├── .htaccess                    <- denies everything if the docroot is wrong
 └── public/                      <- document root
     ├── .htaccess
     ├── index.php                <- the only entry point
+    ├── robots.txt
     └── assets/
 ```
 
 | ID | Rule |
 | --- | --- |
-| DR-1 | `.env`, `composer.json`, `composer.lock`, `src/`, `config/`, `database/`, `resources/`, `tests/`, `vendor/`, `storage/` and `docs/` all stay **outside** the document root (TRD TR-184) |
+| DR-1 | `.env`, `composer.json`, `composer.lock`, `backend/`, `frontend/`, `api/`, `admin/`, `config/`, `database/`, `routes/`, `tests/`, `tools/`, `vendor/`, `storage/` and `docs/` all stay **outside** the document root (TRD TR-184) |
 | DR-2 | `public/index.php` is the **only** PHP entry point (TRD TR-185) |
 | DR-3 | If the document root cannot be changed from the repository root, **fix the vhost**. Do not work around it with rewrites that expose project files |
 | DR-4 | Directory listings are off |
@@ -157,7 +167,7 @@ On the development host:
 
 | ID | Rule |
 | --- | --- |
-| IN-1 | `--no-dev` — **no development tooling in production** (PHPUnit, PHPStan, Rector, Pint, Infection, Insights) |
+| IN-1 | `--no-dev` — **no development tooling in production** (PHPUnit, PHPStan, Pint, and anything added later: Rector, Infection, coverage tooling) |
 | IN-2 | `--optimize-autoloader` — classmap autoloading, measurably faster per request |
 | IN-3 | `composer.lock` is committed and is **authoritative**. `composer update` is never run on a server (DP-3) |
 | IN-4 | `vendor/` is generated on the server and **never committed** |
@@ -176,7 +186,7 @@ On the development host:
 | ID | Rule | Enforced by |
 | --- | --- | --- |
 | CF-1 | All environment-specific values come from the environment, never from code (TRD TR-190) | — |
-| CF-2 | **`Env` is reachable only from `Bulbula\Config`.** No other namespace reads `getenv`, `$_ENV`, `$_SERVER`, `$_GET` or `$_POST` | `tests/Arch/ArchTest.php` |
+| CF-2 | **`Env` is reachable only from `Bulbula\Backend\Core`.** No other namespace reads `getenv`, `$_ENV`, `$_SERVER`, `$_GET` or `$_POST` | architecture assertion — in place (`tests/Arch/BoundariesTest`) |
 | CF-3 | `.env.example` lists **every** variable with a safe placeholder and is committed (TRD TR-191) | — |
 | CF-4 | `.env` is **never** committed | `.gitignore` |
 | CF-5 | A **missing required** variable fails the boot loudly (TRD TR-192) | architecture §12 |
@@ -200,7 +210,7 @@ On the development host:
 
 | ID | Rule |
 | --- | --- |
-| SC-1 | **No secret in Git, ever** (DP-2). `.gitleaks.toml` and the security workflow enforce this in CI |
+| SC-1 | **No secret in Git, ever** (DP-2). `.gitleaks.toml` and the security workflow enforce this in CI — **in place**: `.github/workflows/security.yml` scans the full history on every pull request and on `main`, and locally `gitleaks git .` is the same scan |
 | SC-2 | Secrets reach the server only through `.env`, created once on the host from `.env.example` |
 | SC-3 | `.env` is readable only by the application user (§10) |
 | SC-4 | **No secret is logged, echoed in an error, or returned in a response** (TRD TR-25) |
@@ -218,7 +228,7 @@ On the development host:
 | --- | --- |
 | Location | `database/migrations/` |
 | Naming | `YYYY_MM_DD_HHMMSS_description.php` |
-| Shape | Returns an anonymous class extending `Bulbula\Database\Migrations\Migration` |
+| Shape | Returns an anonymous class extending `Bulbula\Backend\Database\Migrations\Migration` (M2) |
 | Tracking | Table `migrations` (`migration`, `batch`, `executed_at`) |
 | Transactions | **DDL is never wrapped in a transaction** — MariaDB implicitly commits it, so a wrapper would be a lie |
 | Portability | Tests run against in-memory SQLite, so migration SQL stays portable |
@@ -351,21 +361,30 @@ storage/
 
 ## 11. Health checks and smoke test
 
-| Endpoint | Meaning |
-| --- | --- |
-| `/health`, `/api/v1/health` | **Liveness** — the application booted and can answer. No dependencies |
-| `/health/ready`, `/api/v1/health/ready` | **Readiness** — the database is reachable and storage is writable. `503` with per-check detail on failure |
+| Endpoint | Meaning | Status |
+| --- | --- | --- |
+| `GET /health`, `GET /api/v1/health` | **Liveness** — the application booted and can answer. No dependency is touched, so a database blip never restarts a healthy process. `200` with `{"status":"pass"}` | **Built** |
+| `GET /health/ready`, `GET /api/v1/health/ready` | **Readiness** — a real database round-trip, and a writable `storage/logs/`. `200` with `{"status":"pass","checks":{"database":"ok","storage":"ok"}}`, or `503` with `{"status":"fail","checks":{"database":"error"}}` | **Built** |
 
-Both are `no-store` (existing behaviour) and neither exposes internal detail
-beyond the named check and its status (TRD TR-139).
+None of the four exposes internal detail beyond the named check and its
+status (TRD TR-139) — no versions, hosts, paths or credentials. `Cache-Control:
+no-store` is sent by the probe itself today and moves to the header middleware
+with the rest of the security headers at M1; the body does not change.
+
+**Resolved 2026-10-11.** The first pass recorded a deviation here: one merged
+probe answering `ok|degraded`. It is gone. Liveness and readiness are separate
+answers to separate questions, the vocabulary is the specification's `pass|fail`,
+and a monitor watching `/health` for liveness no longer sees a database outage —
+while `/health/ready` still reports it, with per-check detail
+(`architecture.md` §13).
 
 ```bash
 curl -si  https://<host>/                              | head -1   # 200, HTML
-curl -s   https://<host>/health                                    # {"status":"pass",...}
-curl -s   https://<host>/api/v1/health                             # {"status":"pass",...}
-curl -s   https://<host>/health/ready                              # pass, or 503 with detail
+curl -s   https://<host>/health                                    # {"status":"pass"}
+curl -s   https://<host>/health/ready                              # {"status":"pass","checks":{...}}, or 503
+curl -s   https://<host>/api/v1/health/ready                       # the same answer, for a machine
 curl -so /dev/null -w '%{http_code}\n' https://<host>/missing                      # 404
-curl -so /dev/null -w '%{http_code}\n' https://<host>/assets/css/styles.css        # 200
+curl -so /dev/null -w '%{http_code}\n' https://<host>/assets/css/app.css           # 200
 ```
 
 | ID | Rule |
@@ -411,7 +430,7 @@ broker, no daemon, no worker process** (NG-8).
 | CR-3 | Overlap is prevented by a lock; a second invocation exits cleanly rather than racing |
 | CR-4 | Failures are logged with context and exit with a non-zero status (TRD TR-153) |
 | CR-5 | **No cron job is required for the site to serve correct pages.** Cron absence degrades freshness, never correctness (TRD TR-154) |
-| CR-6 | `bin/console` is the **only** file permitted to call `exit()` (ArchTest) |
+| CR-6 | `bin/console` and `public/index.php`'s pre-boot guards are the **only** places permitted to call `exit()`; an architecture assertion holds the rule (`tests/Arch/BoundariesTest`) |
 | CR-7 | Cron invokes the **PHP 8.4 binary explicitly** (§2) |
 | CR-8 | Cron output goes to a log file, never to email |
 
@@ -437,7 +456,7 @@ broker, no daemon, no worker process** (NG-8).
 | --- | --- |
 | PS-1 | No debug output, no stack trace, no SQL, no file path in any production response (EN-1) |
 | PS-2 | No development tooling installed in production (IN-1) |
-| PS-3 | No `dd`, `dump`, `var_dump`, `die`, `exit` or `sleep` anywhere in the codebase — **enforced by `tests/Arch/ArchTest.php`** |
+| PS-3 | No `dd`, `dump`, `var_dump`, `die`, `exit` or `sleep` anywhere in the codebase — **enforced by the architecture suite (`tests/Arch/ConventionsTest`, `tests/Arch/BoundariesTest`)** |
 | PS-4 | No database client, no admin panel, no shell exposed over HTTP from this application |
 | PS-5 | HTTPS everywhere; HTTP redirects to HTTPS |
 | PS-6 | Security headers are set at the application layer so they survive a host change (TRD §34) |
@@ -469,8 +488,10 @@ reset the working tree. See §3.1 — the block belongs in the committed
 
 ### The home page 500s but `/health` works
 
-`/health` has no dependencies; `/` reads `resources/views/home.html`. Check
-that the deploy created `resources/` and that the file is readable.
+`/health` has no dependencies at all; `/` renders
+`frontend/Views/pages/home.php`. Check that the deploy copied `frontend/`,
+that the file is readable, and that `storage/logs/` is writable — a rendered
+page fails loudly rather than silently when a template is missing.
 
 ### A 500 with an empty body
 
@@ -486,10 +507,12 @@ production. An empty 500 therefore means **the request never reached PHP**
 `storage/logs/` must be writable by the web-server user (PM-3). The failure
 is deliberate and loud rather than silently dropping log lines.
 
-### `/health/ready` answers 503
+### `/health/ready` answers 503 while `/health` answers 200
 
 The database settings in `.env` are wrong or MariaDB is unreachable. The
-response body names the failing check.
+response body names the failing check (`"database":"error"`), the application
+itself is fine, and liveness still answers `200` because the process is not the
+broken part — this is the split working as designed.
 
 ---
 

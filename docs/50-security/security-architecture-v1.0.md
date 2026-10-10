@@ -9,6 +9,12 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built. The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement, threshold or header was weakened**; what is not wired up yet is
+> marked **not yet in place**, with the milestone that delivers it.
+
 ## Scope
 
 The V1 security architecture: trust boundaries, security principles,
@@ -210,7 +216,7 @@ is security through obscurity (SEC-3.12).
 
 | ID | Rule | Source |
 | --- | --- | --- |
-| SEC-5.1 | **No secret is committed.** `.gitleaks.toml` scanning is already in CI and must not be weakened | TR-198 |
+| SEC-5.1 | **No secret is committed.** `.gitleaks.toml` scanning is required and must not be weakened; it is **in place** (`security.yml`, full history, per pull request and weekly) and is the control, with `.gitignore` and `.env.example` placeholders supporting it | TR-198 |
 | SEC-5.2 | **No secret is logged**, including in request dumps and exception context | TR-135, TR-01e |
 | SEC-5.3 | Secrets reach the application **from configuration only** | TR-01e, TR-189 |
 | SEC-5.4 | **The Telegram bot token never reaches the client**; launch-context validation is server-side only | TM-7.16, TR-112 |
@@ -306,7 +312,7 @@ Bulbula requirement without a stated reason.
 | T5 | OWASP file upload guidance | Extension and MIME checks are insufficient alone; re-encoding and non-executable storage are the reliable controls | APP §6 |
 | T6 | MDN / W3C security headers | `frame-ancestors` supersedes `X-Frame-Options` where both are understood | The current `frame-ancestors 'none'` **conflicts with embedding in Telegram** — OT-05 |
 | T7 | Google Identity documentation | OAuth state is required for CSRF protection on the callback; embedded webviews are explicitly discouraged for OAuth | AS §5, TR-115 |
-| T8 | Existing repository `SecureHeaders` | Already ships HSTS, `nosniff`, `DENY`, referrer policy, permissions policy and a CSP with `frame-ancestors 'none'` and `style-src 'unsafe-inline'` | Two known future changes, both recorded, neither made here |
+| T8 | Browser-facing security headers | `nosniff`, `DENY`, referrer policy and permissions policy are set by `public/.htaccess` today; HSTS and the CSP (`frame-ancestors 'none'`, `style-src 'unsafe-inline'`) arrive with the `SecureHeaders` middleware at M1, so that they survive a host change | Two known future changes, both recorded, neither made here |
 
 ---
 

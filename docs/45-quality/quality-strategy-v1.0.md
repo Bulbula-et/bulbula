@@ -9,6 +9,13 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built: the toolchain, the suite layout and the namespace map. The authority
+> for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> standard was lowered**; a control that is not wired up yet is marked **not
+> yet in place**, with the milestone that delivers it.
+
 ## Scope
 
 What quality means for Bulbula, what is already enforced, what is
@@ -76,53 +83,68 @@ mechanics (`release-management-v1.0.md`), launch gating
 
 ## 3. What is already enforced
 
-**Description of the repository as it stands.** Nothing here is a
-proposal.
+**What the repository enforces, and what it does not yet.** Nothing here is
+a proposal. A control that is specified but not wired up is marked **not yet
+in place** — the standard is unchanged, and a document that claims a gate it
+does not run is worse than one that admits the gap.
 
 ### 3.1 The local gate
 
-`composer test` runs, in order:
+`composer check` runs, in order:
 
-| # | Step | Command |
-| --- | --- | --- |
-| 1 | Manifest validity | `composer validate --strict` |
-| 2 | Automated refactoring check | `rector --dry-run` |
-| 3 | Code style | `pint --test` |
-| 4 | Static analysis | `phpstan analyse` |
-| 5 | Tests | `pest` |
-| 6 | Type coverage | `pest --type-coverage --min=100` |
+| # | Step | Command | Status |
+| --- | --- | --- | --- |
+| 1 | Code style | `pint --test` | **In place** |
+| 2 | Static analysis | `phpstan analyse` (`level: max`) | **In place** |
+| 3 | Tests | `phpunit` | **In place** |
 
-`composer test:all` additionally runs PHPInsights and Infection.
+`composer validate --strict`, `composer analyse`, `composer lint`, `composer
+fix`, `composer test` and `composer serve` are the other scripts.
+
+Wired since the second pass: manifest validity (`composer validate --strict`,
+first step of `ci.yml`). Still to wire: Rector dry-run, type coverage
+(`--min=100`), line coverage (`--min=100`), PHPInsights, and Infection. Each is
+a quality requirement of this document, not an optional extra.
 
 ### 3.2 Continuous integration
 
-| Workflow | Jobs |
-| --- | --- |
-| **`ci.yml`** | dependencies (`validate --strict`, `check-platform-reqs --lock`, `audit --locked`) · coding-standards (Pint) · static-analysis (**PHPStan level max on `src`**, dependency matrix highest and lowest) · refactoring (Rector dry-run) · tests (Pest, matrix highest and lowest, `--bail`) · type-coverage (`--min=100`) · quality (PHPInsights over `src config public routes database bin`) · code-coverage (pcov, `--min=100`) |
-| **`mutation.yml`** | Infection on `main`, nightly, and on dispatch. **Does not gate a pull request** |
-| **`security.yml`** | `composer audit --locked` and **gitleaks** over the working tree and full history, on pull requests, `main`, and weekly |
+| Workflow | Jobs | Status |
+| --- | --- | --- |
+| **`ci.yml`** | dependencies (`validate --strict`, `check-platform-reqs --lock`, `audit --locked`) · coding-standards (Pint) · static-analysis (**PHPStan level max**, dependency matrix highest and lowest) · refactoring (Rector dry-run) · tests (PHPUnit, matrix highest and lowest, `--bail`) · type-coverage (`--min=100`) · quality (PHPInsights) · code-coverage (pcov, `--min=100`) | **Partly in place** — `validate --strict`, Pint, PHPStan max and PHPUnit run on every push and pull request; the dependency matrix, Rector, type-coverage, PHPInsights and code-coverage jobs are still to wire |
+| **`mutation.yml`** | Infection on `main`, nightly, and on dispatch. **Does not gate a pull request** | **Not yet in place** |
+| **`security.yml`** | `composer audit --locked` and **gitleaks** over the working tree and full history, on pull requests, `main`, and weekly | **In place** — the config extends the default ruleset and disables nothing, and a finding means rotation, not removal |
+
+The local gate runs first — `composer check` is the same three steps in the
+same order, so a green laptop is a green pipeline — and the pipeline is the
+gate that cannot be skipped by accident. §3.4's boundaries are held by
+`tests/Arch/`, which runs in both.
 
 ### 3.3 Thresholds in force
 
-| Threshold | Value | Configured in |
-| --- | --- | --- |
-| Line coverage | **100 %** | `pest:coverage --min=100`, CI code-coverage job |
-| Type coverage | **100 %** | `pest:type-coverage --min=100` |
-| Static analysis | **PHPStan max** | `phpstan.neon.dist` |
-| Mutation score indicator | **100** | `infection.json5` `minMsi` |
-| Covered-code MSI | **100** | `infection.json5` `minCoveredMsi` |
+| Threshold | Value | Configured in | Status |
+| --- | --- | --- | --- |
+| Line coverage | **100 %** | coverage tooling, CI code-coverage job | Not yet wired |
+| Type coverage | **100 %** | type-coverage tool | Not yet wired |
+| Static analysis | **PHPStan max** | `phpstan.neon` | **In place** |
+| Mutation score indicator | **100** | `infection.json5` `minMsi` | Not yet wired |
+| Covered-code MSI | **100** | `infection.json5` `minCoveredMsi` | Not yet wired |
+| Style | **Pint `psr12`** | `pint.json` | **In place** |
 
 ### 3.4 Architectural rules enforced by tests
 
-`tests/Arch/ArchTest.php` fails the build on: framework namespaces ·
-ORM or DBAL · `PDO`/`mysqli`/`curl_init` outside `Bulbula\Database` ·
-SQL in `Bulbula\Http` · controllers touching the database · controller
-and exception naming · `Bulbula\Database` depending on `Http`, `View`
-or `Console` · service namespaces depending on `Http`, `View` or
-`Console` · `Bulbula\View` touching the database or HTTP · `Env` read
-outside `Bulbula\Config` · non-`final` classes · missing `strict_types`
-· non-readonly `Request`, `Response`, `DatabaseConfig` · `dd`, `dump`,
-`ray`, `die`, `var_dump`, `sleep`, `exit` in source.
+The suite is in place at `tests/Arch/` — `BoundariesTest`, `ConventionsTest`
+and `DependenciesTest` over one shared source reader in `tests/Support/`. It
+fails the build on:
+framework namespaces · ORM or DBAL · `PDO`/`mysqli` outside
+`Bulbula\Backend\Database` · `curl_init` outside
+`Bulbula\Backend\Integrations` · SQL in `Bulbula\Backend\Core` · controllers
+touching the database · controller and exception naming ·
+`Bulbula\Backend\Database` depending on the HTTP layer or a surface ·
+`Bulbula\Backend\Domain` and `Bulbula\Backend\Services` depending on the HTTP
+layer or a surface · `Bulbula\Backend\Core\View` touching the database or HTTP
+· `Env` read outside `Bulbula\Backend\Core` · SQL outside a repository ·
+non-`final` classes · missing `strict_types` · non-readonly `Request` and
+`Response` · `dd`, `dump`, `ray`, `die`, `var_dump`, `sleep`, `exit` in source.
 
 | ID | Rule | Source |
 | --- | --- | --- |
@@ -229,7 +251,7 @@ Honesty about the limits of the gate.
 | --- | --- |
 | §1 meaning | D-02, D-54; DQ-1…DQ-6; OPS-1 |
 | §2 principles | D-26; NG-1, NG-4, NG-7, NG-8; TD-07; TRD §40; PRD §24 |
-| §3 enforced | `composer.json` scripts; `.github/workflows/*`; `phpstan.neon.dist`; `infection.json5`; `tests/Arch/ArchTest.php`; AC-1, AC-2, AC-3, AC-5; TR-01 |
+| §3 enforced | `composer.json` scripts; `pint.json`; `phpstan.neon`; `tests/Arch/`; `.github/workflows/ci.yml` and `security.yml`; `.gitleaks.toml`; and, when wired, `mutation.yml`, `infection.json5`, `rector.php` and the coverage configuration; AC-1, AC-2, AC-3, AC-5; TR-01 |
 | §4 thresholds | D-26; TRD §40.2 |
 | §5 judgement | DQ-2; MOD-6; PG §11; AO §9 |
 | §6 signals | PRD §26.3; `listing-operations.md` §6.3; SRCH-8 |

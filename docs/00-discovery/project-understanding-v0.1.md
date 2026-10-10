@@ -9,6 +9,17 @@
 | **Date** | 2026-10-07 |
 | **Repository baseline** | `main` @ `fc6188b` (139 tracked files) |
 | **Supersedes** | — |
+
+> **Status note — 2026-10-11.** This is a Phase-2 discovery snapshot of a
+> repository state that has since been rebuilt. The layout it describes (`src/`,
+> `resources/views/`) has been replaced by the surface-first layout
+> (`frontend/ api/ admin/ backend/`) — see
+> [`../70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md)
+> for what is true today. The historical content is left as written, because a
+> discovery report that is edited to match a later state stops being evidence.
+> One consequence worth stating plainly: **the `.ai/` context system described
+> in §34 is not used in this repository**, and is not part of the binding
+> ruleset.
 | **Companion** | [research-notes-v0.1.md](research-notes-v0.1.md) |
 
 ## How to read this document
