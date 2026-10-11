@@ -45,7 +45,15 @@ final class LocalFileMailer implements Mailer
             throw new RuntimeException('Could not create the local mail directory [' . $this->directory . '].');
         }
 
-        $name = gmdate('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.txt';
+        // Microsecond precision is deliberate. Two codes can be issued inside
+        // one second (a sign-in and then a link confirmation), and whoever reads
+        // the spool — a developer, or a test — must be able to tell which
+        // message is the later one. With second precision the only ordering
+        // left is the random suffix, which orders nothing.
+        $microseconds = (int) floor(fmod(microtime(true), 1.0) * 1_000_000);
+
+        $name = gmdate('Ymd-His') . '-' . sprintf('%06d', $microseconds)
+            . '-' . bin2hex(random_bytes(4)) . '.txt';
 
         $written = file_put_contents(
             rtrim($this->directory, '/') . '/' . $name,

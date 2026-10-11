@@ -121,6 +121,11 @@ final class GoogleSignInTest extends ApplicationTestCase
         self::assertSame(201, $signedIn->status());
         self::assertCount(1, $this->rows('SELECT id FROM provider_identities'));
 
+        // Everything delivered so far belongs to the sign-in above; whatever
+        // arrives next is the link code, and naming it is what makes the
+        // assertion below independent of how fast the two messages are written.
+        $beforeGoogle = $this->deliveredFiles();
+
         // Google asserts the same verified address — and is *not* attached (LK-6).
         $response = $this->post('/api/v1/auth/google', ['credential' => $this->token()]);
 
@@ -128,11 +133,12 @@ final class GoogleSignInTest extends ApplicationTestCase
         self::assertSame('confirm_required', $this->json($response)['status']);
         self::assertCount(1, $this->rows('SELECT id FROM provider_identities'), 'no identity is attached yet');
         self::assertCount(0, $this->rows("SELECT id FROM provider_identities WHERE provider = 'google'"));
+        self::assertCount(1, array_diff($this->deliveredFiles(), $beforeGoogle), 'one link code is sent');
 
         // The code that proves the mailbox completes the link.
         $confirmed = $this->post('/api/v1/auth/otp/verify', [
             'email' => 'sara@example.com',
-            'code'  => $this->deliveredCode(),
+            'code'  => $this->deliveredCode($beforeGoogle),
         ]);
 
         self::assertSame(201, $confirmed->status());
