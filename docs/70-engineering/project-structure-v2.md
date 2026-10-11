@@ -458,6 +458,59 @@ web-facing half of this flow are the next slice.
 
 This pass left the suite at 143 tests and 3,967 assertions.
 
+### 11.5 Fifth pass — sign-in on the wire: the web journey, the API twin and the mail seam (2026-10-11)
+
+The fifth pass puts §11.4's services on the wire. Sources of truth are
+`api-spec-v1.0.md` §1.5–1.6 and §3.1, `auth-identity.md` §6 and `security.md`
+(the CSRF and session rules); rules are cited per file rather than restated
+here.
+
+| Built | Where | Traces to |
+| --- | --- | --- |
+| `Cookie` (hardened defaults, `forget()`) | `backend/Core/` | CS-5, S-5 |
+| `Request`: `cookies()`, `cookie()`, `bearerToken()`; `Response`: `list<Cookie>`, one `Set-Cookie` per cookie with replace `false` | `backend/Core/` | TD-02, CS-3 |
+| `Csrf` (double-submit before sign-in, session-bound after), `RateLimitDecision`, `CsrfTokenMismatchException` (419), `AuthenticationRequiredException` (401) | `backend/Security/`, `backend/Exceptions/` | CS-1…CS-5, E-6 |
+| `Message`, `Mailer`, `LocalFileMailer`, `MailOtpSender` | `backend/Mail/`, `backend/Services/Identity/` | TD-07, OTP-1, OTP-10 |
+| `SignInController` + `pages/sign-in.php` (two stages, no JavaScript) | `frontend/` | C-30, C-31 |
+| `AuthController` (`requestCode`, `verify`, `logout`) | `api/Controllers/V1/` | api-spec §3.1 |
+| `GET /sign-in`, `POST /sign-in/{code,verify,sign-out}`, `POST /api/v1/auth/otp/{request,verify}`, `POST /api/v1/auth/logout` | `routes/web.php`, `routes/api.php` | api-spec §1.5–1.6 |
+| `2026_10_11_140000_add_csrf_hash_to_sessions` | `database/migrations/` | CS-2, K-6 |
+
+**What this pass had to decide, and how it decided it:**
+
+- **The mail seam is a port, not an integration.** `backend/Mail/` holds the
+  outbound port (`Mailer`) and the one transport that needs no credentials
+  (`LocalFileMailer`, refused unless `APP_ENV=local`). A provider adapter would
+  implement the same interface; D-41 is still open, so none is built. Placing
+  the port here rather than under a named provider keeps TD-07's single outbound
+  namespace intact without inventing a provider this pass has no decision for.
+- **An unconfigured deployment must refuse, not log.** `MAIL_TRANSPORT` names
+  the transport; any value that is not `local` selects `UndeliverableOtpSender`,
+  so a half-configured environment returns its uniform answer and sends nothing,
+  rather than writing a live sign-in code into a log (OTP-10).
+- **API auth never falls back to cookies.** `AuthController` reads the bearer
+  token only; a session cookie presented to the API is not a token (CS-3). This
+  makes TD-02's "one session, two transports" explicit in code.
+- **No account enumeration, on either surface.** The web stage answers the same
+  whether or not the address exists; the API returns `202 {"status":"sent"}`
+  unconditionally. The only difference is in the log.
+
+**Defect found and fixed while testing this pass:** the feature-test harness
+booted the application *outside* the environment window that a test declares,
+so both feature classes ran against the development database and its
+accumulated rate-limit rows — first requests returned 429 and "no message was
+delivered" cascaded from there. `ApplicationTestCase::boot()` now performs
+`boot()` inside that window, because `.env` and `config/*.php` are read during
+boot. This is recorded here because it was a harness property, not a product
+bug: the production code was behaving correctly.
+
+**What is deliberately not built:** `/auth/google` (needs the Google adapter),
+`/auth/session` (capabilities — waits on TD-03), `/auth/telegram/context`
+(D-33 open; AU-4/AU-5), the TD-03 permission check itself, and staff sign-in
+(blocked by D-45). No linking behaviour was invented (D-13).
+
+This pass left the suite at 162 tests and 4,768 assertions.
+
 ---
 
 *Companion records: `php-application-structure-v1.0.md` (superseded; its feature
