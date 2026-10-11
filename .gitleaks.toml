@@ -1,0 +1,43 @@
+# Secret scanning — TR-198, APP-8.9, SEC-5.1.
+#
+# This file extends the built-in ruleset. Nothing is disabled and no rule is
+# weakened: the allowlist only covers files that are *meant* to be public, so
+# that a placeholder in documentation is not reported as a leaked credential.
+#
+# A finding means the secret is treated as leaked and rotated, not merely
+# removed (REL-3.7).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public placeholders — safe by design, and reviewed as such"
+paths = [
+  # The template that documents which variables exist, never their values.
+  '''^\.env\.example$''',
+  # Example payloads in the specification set.
+  '''^docs/''',
+  # Third-party code we did not write, do not track, and cannot fix: a
+  # dependency's own fixtures are not a leak in this repository.
+  '''^vendor/''',
+  # Local tool caches (PHPStan, PHPUnit) — never committed, never distributed.
+  '''^\.cache/''',
+]
+
+regexes = [
+  # A value that announces itself as a placeholder is not a credential.
+  '''(?i)(changeme|change_me|placeholder|your[-_ ]?(key|token|secret|password)|example|dummy|redacted|xxxx+)''',
+]
+
+# Words that mark the surrounding text as documentation rather than data.
+# These belong to the allowlist: at the file root they are not read at all.
+stopwords = [
+  'example',
+  'placeholder',
+]
+
+# Scope note for local use: the CI job scans git (tracked content and full
+# history), so a developer reproducing it locally runs `gitleaks git .`.
+# Scanning the working directory instead (`gitleaks dir .`) also walks files
+# Git ignores — `.env` above all — where a finding is a local-state question,
+# not a repository one.

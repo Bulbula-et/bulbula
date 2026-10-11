@@ -1,0 +1,62 @@
+name: Security
+
+# Two controls that fail the build rather than a person's memory:
+# a secret that reached the working tree (TR-198, APP-8.9, SEC-5.1) and a
+# dependency with a published advisory.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history: a secret that was committed and then deleted is still
+          # a secret that leaked (REL-3.7).
+          fetch-depth: 0
+
+      - name: Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # GITLEAKS_LICENSE is required for organization repositories only.
+
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      - name: composer audit (locked)
+        run: composer audit --locked --no-interaction
+
+      - name: Platform requirements (locked)
+        # Production is a different machine. A missing extension must fail
+        # here rather than on the host during a deploy (IN-1).
+        run: composer check-platform-reqs --lock --no-interaction

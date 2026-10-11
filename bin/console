@@ -1,0 +1,30 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Bulbula console.
+ *
+ * The only file in the project that calls exit(): everything else returns
+ * values, so every class stays testable.
+ */
+
+use Bulbula\Backend\Core\Application;
+
+define('BASE_PATH', dirname(__DIR__));
+
+$autoload = BASE_PATH . '/vendor/autoload.php';
+
+if (!is_file($autoload)) {
+    fwrite(STDERR, "Dependencies are not installed. Run: composer install\n");
+    exit(1);
+}
+
+require $autoload;
+
+$application = new Application(BASE_PATH);
+$application->boot();
+
+// The only exit() in the project: every command returns a code instead.
+exit($application->console()->run($argv));

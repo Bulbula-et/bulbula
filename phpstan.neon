@@ -1,0 +1,11 @@
+parameters:
+    level: max
+    paths:
+        - backend
+        - frontend
+        - api
+        - admin
+        - routes
+        - bin
+    tmpDir: .cache/phpstan
+    treatPhpDocTypesAsCertain: false

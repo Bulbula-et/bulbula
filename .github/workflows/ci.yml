@@ -1,0 +1,59 @@
+name: CI
+
+# The gate the quality strategy names: format, then types, then tests.
+# Local `composer check` runs exactly the same three steps in the same order,
+# so a green laptop is a green pipeline.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality gate (PHP 8.4)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo, pdo_sqlite, pdo_mysql, intl, mbstring
+          coverage: none
+          tools: composer:v2
+          ini-values: memory_limit=512M
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Validate the manifest and the lock file
+        # A lock file that does not match composer.json installs something
+        # nobody reviewed.
+        run: composer validate --strict
+
+      - name: Lint (Pint, PSR-12)
+        run: composer lint
+
+      - name: Static analysis (PHPStan, level max)
+        run: composer analyse
+
+      - name: Tests (Unit, Feature, Arch)
+        run: composer test

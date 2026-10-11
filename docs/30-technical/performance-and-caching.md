@@ -9,6 +9,13 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built: the surface-first layout, the namespace map and the toolchain in use.
+> The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement was removed or weakened**; what is not yet built is marked **not
+> yet in place** with the milestone that delivers it.
+
 **Scope.** How Bulbula stays fast on shared hosting with no extra services:
 rendering strategy, SQL discipline, HTTP caching, application caching,
 invalidation, assets, images, compression, and bounded operations.
@@ -67,7 +74,7 @@ have happened (TRD P-3).
 | RN-2 | JavaScript is **progressive enhancement**. Every core capability works without it (PRD SUR-3) | D-16 |
 | RN-3 | **No SPA, no client-side router, no hydration step, no build-time framework runtime** | D-16 (SPA rejected), TRD NG-1 |
 | RN-4 | No render-blocking third-party script in the critical path | PT-1 |
-| RN-5 | The view layer composes strings and touches no database and no HTTP (ArchTest: `View` free of `Database`/`Http`/`PDO`) | architecture §2 |
+| RN-5 | The view layer composes strings and touches no database and no HTTP (architecture assertion: `Bulbula\Backend\Core\View` free of `Database`/`PDO`, M1) | architecture §2 |
 | RN-6 | Content comes first in the document order; chrome and enhancements follow | PT-1 |
 | RN-7 | Elements that change size when they load reserve their space | PT-3 |
 
@@ -97,7 +104,7 @@ This is where a directory actually gets slow.
 | DB-7 | Expensive aggregates (ratings, completeness, counts) are **maintained**, not computed per request | `data-model.md` §6.5 |
 | DB-8 | Search uses the maintained search document, never a six-way join | `search-design.md` §3 |
 | DB-9 | Write-heavy work (reindex, rollups) runs in console commands, never in a request | TRD TD-06 |
-| DB-10 | SQL lives in the repository layer only — never in controllers, views or `Bulbula\Http` (ArchTest) | architecture §2 |
+| DB-10 | SQL lives in the repository layer only — never in controllers, views or `Bulbula\Backend\Core` (architecture assertion, M1) | architecture §2 |
 
 **Indexing follows the access path, not intuition:** the composite index for
 Category × Area browsing (C-06), the bounding-box index for nearby (C-07),

@@ -9,6 +9,13 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built: the toolchain, the suite layout and the namespace map. The authority
+> for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> standard was lowered**; a control that is not wired up yet is marked **not
+> yet in place**, with the milestone that delivers it.
+
 ## Scope
 
 What is tested, at which level, with what tools, against what
@@ -33,21 +40,28 @@ checks (`../40-operations/`).
 
 ## 1. Existing baseline
 
-| Item | Value |
-| --- | --- |
-| Test framework | **Pest 4** over PHPUnit |
-| Suites | `unit` (PHPUnit-style, `tests/Unit`) · `feature` (Pest-style, `tests/Feature`) · `arch` (`tests/Arch`) |
-| Current size | **424 tests, 1 033 assertions** |
-| Line coverage | **100 %**, enforced at `--min=100` |
-| Type coverage | **100 %**, enforced at `--min=100` |
-| Static analysis | **PHPStan at max** on `src` |
-| Mutation testing | **Infection**, `minMsi: 100`, `minCoveredMsi: 100`, `--testsuite=unit` |
-| Test database | **In-memory SQLite** |
-| Production database | **MariaDB via PDO** |
+| Item | Value | Status |
+| --- | --- | --- |
+| Test framework | **PHPUnit 11** | **In place** |
+| Suites | `Unit` (`tests/Unit`) · `Feature` (`tests/Feature`) · `Arch` (`tests/Arch`) · `Support` (harness) | All four in place |
+| Current size | **53 tests, 1448 assertions** (2026-10-11) — `Unit` 23, `Feature` 8, `Arch` 22 | — |
+| Line coverage | **100 %**, to be enforced at `--min=100` | **Not yet wired** |
+| Type coverage | **100 %**, to be enforced at `--min=100` | **Not yet wired** |
+| Static analysis | **PHPStan at max** over `backend api admin frontend routes bin` | **In place** |
+| Mutation testing | **Infection**, `minMsi: 100`, `minCoveredMsi: 100`, over the `unit` suite | **Not yet wired** |
+| Style | Pint, `psr12` + `declare_strict_types` | **In place** |
+| Test database | **In-memory SQLite** (`DB_DRIVER=sqlite`, forced by `phpunit.xml`) | **In place** |
+| Production database | **MariaDB via PDO** | — |
+
+The standard did not move: coverage, type coverage and mutation testing are
+required at the values below and are scheduled, not dropped. What changed is
+that the document no longer describes tooling that is not installed — a test
+strategy that lies about its own gate is the first thing a new contributor
+stops believing.
 
 | ID | Rule | Source |
 | --- | --- | --- |
-| TST-1.1 | **The suite split is meaningful, not cosmetic**: `unit` is what Infection mutates, so a behaviour that matters must have unit-level coverage or its mutants survive | `infection.json5` |
+| TST-1.1 | **The suite split is meaningful, not cosmetic**: `Unit` is what Infection mutates, so a behaviour that matters must have unit-level coverage or its mutants survive | `infection.json5` (to be configured) |
 | TST-1.2 | **Migrations stay in portable SQL**, or provide an engine-specific branch, because the suite runs on SQLite | TR-173 |
 | TST-1.3 | **SQLite is not MariaDB.** Anything depending on engine-specific behaviour — collation, full-text, strictness — is verified against MariaDB outside the suite | TR-173, §6 |
 
@@ -57,8 +71,8 @@ checks (`../40-operations/`).
 
 | Level | Answers | Where | Notes |
 | --- | --- | --- | --- |
-| **Architecture** | Are the boundaries intact? | `tests/Arch` | Fails the build; extended per new namespace (TR-01) |
-| **Unit** | Does this piece behave? | `tests/Unit` | Mutated by Infection; no I/O (TR-05) |
+| **Architecture** | Are the boundaries intact? | `tests/Arch` | **In place.** Fails the build; extended per new boundary (TR-01) |
+| **Unit** | Does this piece behave? | `tests/Unit` | Mutated by Infection when it is wired; no I/O (TR-05) |
 | **Feature** | Does this capability behave end to end in-process? | `tests/Feature` | HTTP in, response out |
 | **Contract** | Does the API match its specification? | Feature | Per `api-spec-v1.0.md` |
 | **Manual** | Does it make sense to a person? | Operations | §7 |
@@ -136,7 +150,7 @@ requirement.
 
 | ID | Rule | Source |
 | --- | --- | --- |
-| TST-5.1 | **Infection runs on `main`, nightly, and on dispatch. It does not gate a pull request today** | `mutation.yml` |
+| TST-5.1 | **Infection runs on `main`, nightly, and on dispatch. It does not gate a pull request** | `mutation.yml` — **not yet in place** |
 | TST-5.2 | **`minMsi` and `minCoveredMsi` are both 100 and are not lowered** | `infection.json5`, D-26 |
 | TST-5.3 | **A surviving mutant is a weak test. Strengthen the test** | Owner instruction |
 | TST-5.4 | **Mutants are not suppressed, ignored or excluded to reach the score** | Owner instruction |

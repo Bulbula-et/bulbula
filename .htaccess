@@ -1,0 +1,11 @@
+# The repository root is NOT the web root — public/ is.
+#
+# This file exists for the case where that is configured wrongly: a
+# virtual-host pointed at the repository root, or a control panel that serves a
+# directory it should not. With it, a misconfigured site returns 403 for
+# everything instead of serving application code, configuration, migrations,
+# logs or uploads.
+#
+# Do not edit this to "make the site work". Fix the docroot instead: it must be
+# the public/ directory.
+Require all denied

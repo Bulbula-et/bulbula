@@ -1,0 +1,39 @@
+# Everything that is not an existing file is handled by the front controller.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Redirect direct requests for index.php to the clean path.
+    RewriteCond %{THE_REQUEST} \s/+index\.php[\s?] [NC]
+    RewriteRule ^ / [R=301,L]
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# Never serve a dotfile, a backup or a template as-is.
+<FilesMatch "(^\.|\.(env|log|sql|bak|old|orig|sh|md|json|lock|ini|dist)$)">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+</IfModule>
+
+Options -Indexes -MultiViews
+ServerSignature Off

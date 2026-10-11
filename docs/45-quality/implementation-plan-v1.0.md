@@ -9,6 +9,15 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built: the baseline in §4, the layout and namespace map, the toolchain, and
+> the workflow in §20. The authority for the layout is
+> [`../70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md).
+> **No requirement was removed or weakened**; what is not yet built is marked
+> **not yet in place** with the milestone that delivers it. The `.ai/` context
+> ritual is **not used** in this repository: the specification set in `docs/`
+> plus the structure document are the whole binding ruleset.
+
 ## Scope
 
 **In scope.** The order in which Bulbula V1 is built, the boundaries between
@@ -32,7 +41,7 @@ docs/60-decisions/decision-register.md
         ↓
 formal documentation (10-product … 55-privacy)
         ↓
-.ai/ context
+engineering structure (70-engineering/project-structure-v2.md)
         ↓
 this implementation plan
         ↓
@@ -54,7 +63,7 @@ code
 | Item | Position |
 | --- | --- |
 | **Produced by** | Phase 3.9 — implementation planning. No application code was written in that phase |
-| **Inputs** | The complete `docs/` tree, `.ai/`, [`documentation-audit-v1.0.md`](documentation-audit-v1.0.md), and a direct inspection of the repository at the baseline below |
+| **Inputs** | The complete `docs/` tree, [`documentation-audit-v1.0.md`](documentation-audit-v1.0.md), and a direct inspection of the repository at the baseline below |
 | **Changes when** | A blocking decision is resolved, a milestone completes, or the dependency order is found to be wrong in practice |
 | **Does not change when** | An implementation finds a requirement inconvenient. That path runs through §13 |
 | **Status meaning** | `Draft` — the plan is usable for build sequencing; only the owner moves it to `Approved` (D-29) |
@@ -100,69 +109,80 @@ pressure.
 | Legal meaning is unclear | **PENDING COUNSEL.** Do not reason toward an answer | AI-G-04 |
 | A threshold depends on the pilot | **PENDING PILOT.** Do not invent a number | AI-G-03 |
 
-The full binding ruleset is [`../../.ai/ai-workflow-rules.md`](../../.ai/ai-workflow-rules.md).
-§20 adds only what is specific to implementation sequencing; it does not
-restate those rules.
+The binding ruleset is the specification set in `docs/` itself — precedence in
+TRD §2 — plus [`../70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md)
+for where code goes and how it is written. §20 adds only what is specific to
+implementation sequencing; it does not restate those rules.
 
 ---
 
 ## 4. Current repository baseline
 
-Read from the repository during Phase 3.9, not from a previous phase report.
+Read from the working tree on **2026-10-11**. The layout is the surface-first one
+described in [`../70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md),
+which is the authority for where a file goes.
 
 ### 4.1 Runtime and dependencies
 
 | Item | Verified value |
 | --- | --- |
-| PHP constraint | `^8.4` (toolchain in use: 8.4.26) |
-| Autoloading | PSR-4, `Bulbula\` → `src/` |
+| PHP constraint | `^8.4` (`composer.json`) |
+| Autoloading | PSR-4, one root per surface: `Bulbula\Frontend\` → `frontend/`, `Bulbula\Api\` → `api/`, `Bulbula\Admin\` → `admin/`, `Bulbula\Backend\` → `backend/` |
 | Runtime dependencies | `nikic/fast-route`, `monolog/monolog`, `psr/log`, `vlucas/phpdotenv`, plus `ext-pdo` and `ext-pdo_mysql` |
-| Framework | **None**, by architecture rule and by test |
+| Framework | **None**, by rule (held by `tests/Arch/DependenciesTest`) |
 | ORM or query builder | **None** (TR-164) |
 | Static analysis | PHPStan `level: max`, no baseline file |
-| Style and refactoring | Pint (psr12), Rector over `config,public,src,tests` |
-| Mutation testing | Infection, `minMsi` and `minCoveredMsi` both at 100, over the `unit` suite |
+| Style | Pint, `psr12` + `declare_strict_types`, `final_class`, ordered imports |
+| Refactoring, mutation, coverage, type coverage | **Not yet in place.** Rector, Infection at `minMsi`/`minCoveredMsi` 100, `--min=100` coverage and `--type-coverage --min=100` remain the standard (§12.5, test strategy §1); none is wired into the repository yet. CI runs what is in place: `.github/workflows/ci.yml` (validate → Pint → PHPStan max → PHPUnit) and `.github/workflows/security.yml` (dependency audit and secret scan) |
+| Tests | **PHPUnit 11**, in-memory SQLite, no database required to run the suite |
 
 ### 4.2 Code present
 
 | Area | State |
 | --- | --- |
-| `src/` | **49 files.** `Foundation`, `Config`, `Logging`, `Error`, `Support`, `Exception`, `Http`, `Http\Routing`, `Http\Middleware`, `Http\Controller`, `Database`, `Database\Migrations`, `Console`, `Diagnostics`, `View` |
+| `backend/Core` | Environment, config, request, response, router + `RouteMatch`, `ControllerFactory`, kernel, view, error renderer |
+| `backend/Database` | `Connection` (lazy, `ping()`), `ConnectionFactory` (MySQL and SQLite) |
+| `backend/Exceptions` | Abstract `HttpException` plus Not Found, Method Not Allowed, Server Error, Validation, Configuration and View failures |
+| `backend/Support` | `LoggerFactory` (Monolog; verifies its target is writable at boot), template helpers `e()`, `asset()`, `url()`, `Health/` (`HealthChecker`, `HealthReport`) |
+| `backend/Security`, `Integrations`, `Mail`, `Console`, `Domain`, `Repositories`, `Services` | **Empty** — created by the slices that need them (§10, §11) |
+| `frontend/` | `HomeController`, `SearchController`, layout, header/footer partials, two page templates, one stylesheet |
+| `api/` | `HealthController` — liveness and readiness, serving all four probe paths |
+| `admin/` | **Empty.** The console is M6 |
 | Business features | **None.** No Business, Branch, Listing, Category, Area, Review, Save, Search, Campaign, Customer or staff entity exists in code |
-| `routes/` | `web.php`, `api.php` — `GET /`, `/health`, `/health/ready`, `/api/v1/health`, `/api/v1/health/ready` |
-| `database/migrations/` | **One** migration, `2026_10_04_120000_create_health_checks_table.php` |
-| `resources/views/` | One template, `home.html` |
-| `public/` | One entry point `index.php`, `.htaccess`, and the coming-soon assets |
-| `config/` | `app.php`, `database.php`, `logging.php` |
-| `bin/console` | CLI entry point for migrations and commands |
-| `.github/workflows/` | `ci.yml`, `mutation.yml`, `security.yml`, plus `dependabot.yml` |
-| `tools/` | Four read-only verifiers: `verify-docs.py`, `verify-ai-context.py`, `qa35.py`, `qa36.py` |
+| `routes/` | `web.php` (`/`, `/search`), `health.php` (the four probes — the only family that defines them), `api.php`, `admin.php` and `console.php`. Every planned path is listed in a comment block in its file, so the URL grammar is readable before it is implemented |
+| `database/migrations/` | **Empty.** The first migration is M2 |
+| `config/` | `app.php`, `database.php`, `security.php`, `logging.php`, `mail.php` |
+| `bin/console` | CLI entry point; **no commands registered yet** |
+| `public/` | `index.php`, `.htaccess`, `assets/css/app.css`; plus the repository-root and `storage/` `.htaccess` deny rules |
+| `tests/` | `Unit` (controller factory, router, config, response encoding, health checker, logger factory), `Feature` (health endpoints, home page, not found), `Arch` (boundaries, conventions, dependencies), `Support` (application test case, source-file reader) |
+| `.github/workflows/` | `ci.yml` (validate → Pint → PHPStan max → PHPUnit) and `security.yml` (`composer audit --locked`, gitleaks over the full history). The remaining jobs named in quality strategy §3.2 are still open |
+| `tools/` | `router.php` (development server), `scaffold-structure.sh` (structure generator). **The four verifier scripts earlier phases referenced are not in this repository** |
+| `docs/70-engineering/` | `project-structure-v2.md` (layout authority), `php-application-structure-v1.0.md` (superseded), `findings-v1.0.md`, `structure-manifest.txt` |
 
 ### 4.3 Quality baseline
 
 | Measure | Value at this baseline |
 | --- | --- |
-| Tests | **424** |
-| Assertions | **1,033** |
-| Line coverage | **100 %**, enforced at `--min=100` |
-| Type coverage | **100 %**, enforced at `--min=100` |
-| Architecture assertions | **18**, in `tests/Arch/ArchTest.php` |
-| Test files | 49, across `Unit`, `Feature`, `Arch` |
-| Gate | `composer test` = validate → Rector → Pint → PHPStan → Pest → type coverage |
+| Tests | **57** — `Unit` 26, `Feature` 8, `Arch` 23 |
+| Assertions | **1500** |
+| Line coverage | **Not measured yet** — the standard is 100 % when coverage tooling is configured |
+| Type coverage | **Not measured yet** — the standard is 100 % when the tool is configured |
+| Architecture assertions | **23** in `tests/Arch/`; every new boundary is added to it in the change that creates the boundary (TR-01) |
+| Gate | `composer check` = Pint → PHPStan level max → PHPUnit. **Green on 2026-10-11.** `.github/workflows/ci.yml` runs the same three steps in the same order |
 
 | Rule | Statement |
 | --- | --- |
 | IMP-4.1 | **These numbers are a floor, not a target.** They grow with the product |
 | IMP-4.2 | **No threshold may be lowered and no mutant may be suppressed** to accommodate implementation. A surviving mutant is a weak test (D-26) |
-| IMP-4.3 | **Every new namespace is added to `tests/Arch/ArchTest.php`** in the same change that creates it (TR-01). An unguarded namespace is an incomplete slice |
+| IMP-4.3 | **Every new area, layer or namespace is added to an architecture assertion in the same change that creates it** (TR-01). An unguarded boundary is an incomplete slice |
 
 ### 4.4 What the baseline means for planning
 
-The foundation is real but deliberately empty: there is an HTTP kernel, a
-router, a migration runner, a view renderer and a health check, and **nothing
-of the product**. Consequently the first product slice is also the first real
-exercise of every seam the architecture promises. That is an argument for
-making it narrow and complete rather than wide and partial (§11).
+The foundation runs, and it holds **nothing of the product**: one page, one
+probe, and 404 for everything else. That is the intended state — the skeleton
+exists, and the first product slice is the first real exercise of every seam
+the architecture promises. It is an argument for making that slice narrow and
+complete rather than wide and partial (§11).
 
 ---
 
@@ -177,7 +197,7 @@ invites the exact drift the architecture tests exist to catch.
 | --- | --- | --- |
 | Framework-free PHP | Rejected and never added: no Laravel, no Symfony full-stack, no Laminas, no Mezzio, no Dotkernel, no Slim, no Flight, and no home-grown framework | Owner instruction; architecture test |
 | PHP 8.4+ | Pinned by `composer.json` and by the handler block in `public/.htaccess` | TR-191 |
-| Composer, PSR-4 | One namespace root, `Bulbula\` | Existing foundation |
+| Composer, PSR-4 | One namespace root per surface — `frontend`, `api`, `admin`, `backend` | Structure doc §3 |
 | FastRoute | Routing is matching only; it holds **no** business rule | `architecture.md` §2.1 |
 | PDO / MariaDB | Prepared statements only; **no** ORM, **no** DBAL, **no** query builder | TR-164, TR-170 |
 | Explicit composition | `Application` is a composition root, **not** a container. **No** auto-wiring, **no** annotation scanning, **no** reflection magic | `architecture.md` §1.2 |
@@ -240,13 +260,13 @@ concern from the first slice**, not a later integration task (TST-4.3).
 | **Not** in a render path | **No** outbound HTTP call may occur while rendering a page; it belongs in console commands and queued jobs | TR-01d, TR-205 |
 | Substituted in tests | **No** test reaches a real external service | TST-2.3 |
 
-> **This one is not yet built, and it is a trap.** `curl_init` is currently
-> confined to `Bulbula\Database` by an architecture assertion. The gateway
-> namespace TD-07 describes **does not exist in `src/`**. The first slice that
-> needs an outbound call must create that namespace **and** extend
-> `tests/Arch/ArchTest.php` to permit it there and nowhere else. Relaxing the
-> existing assertion without adding the replacement is the precise failure the
-> boundary exists to prevent.
+> **This one is not yet built, and it is a trap.** `Bulbula\Backend\Integrations`
+> exists as a directory and holds nothing. The first slice that needs an
+> outbound call creates the transport there **and** adds the architecture
+> assertion that confines `curl_*` to it in the same change. Nothing else in
+> the application opens an outbound connection, so the boundary holds today by
+> absence, not by test — and absence stops being an argument the moment the
+> first adapter lands.
 
 ---
 
@@ -496,8 +516,8 @@ appears when the code that belongs in it does.
 | **Source requirements** | `architecture.md` §4, §12, §13; TR-192…TR-194 |
 | **Depends on** | Nothing |
 | **Entities** | None |
-| **Services** | `Application`, `Services`, `Environment`, `HttpKernelFactory` |
-| **APIs** | `/api/v1/health`, `/api/v1/health/ready` |
+| **Services** | `Application` (composition root), `Env`, `Config`, `ControllerFactory`, `Kernel`, `Router` |
+| **APIs** | `/health`, `/health/ready` and their `/api/v1` twins |
 | **Tests** | Unit for config and environment; feature for boot failure; arch for `Env` confinement |
 | **Open decisions** | D-23 (secret custody, deployment-time), D-20 (host limits) |
 | **Downstream** | Everything |
@@ -512,7 +532,7 @@ appears when the code that belongs in it does.
 | **Entities** | None |
 | **Services** | Middleware set; pagination primitives; error handler |
 | **APIs** | The envelope and error contract of every endpoint |
-| **Tests** | Unit per middleware; feature for the pipeline; arch for "no SQL in `Bulbula\Http`" |
+| **Tests** | Unit per middleware; feature for the pipeline; arch for "no SQL in `Bulbula\Backend\Core`" |
 | **Open decisions** | OT-08 (pagination style) — internal, contract-neutral |
 | **Downstream** | Every surface module |
 
@@ -1170,12 +1190,13 @@ verification and, for the last, to counsel.
 
 ### 12.5 Quality gates per slice
 
-| Gate | When |
-| --- | --- |
-| `composer test` | Before every commit that is proposed for merge |
-| Infection | Before a PR that changes domain logic; **never** with a suppressed mutant |
-| `tools/verify-docs.py`, `tools/verify-ai-context.py` | Before a PR that touches `docs/` or `.ai/` |
-| Manual accessibility pass | Before a PR that changes a rendered surface |
+| Gate | When | Status |
+| --- | --- | --- |
+| `composer check` (Pint → PHPStan max → PHPUnit) | Before every commit that is proposed for merge | **In place** |
+| Architecture assertions (`tests/Arch/`) | Before every PR; a new boundary is guarded in the change that creates it | **In place** |
+| Coverage, type coverage and Infection at their thresholds | Before a PR that changes domain logic; **never** with a suppressed mutant | Not yet wired |
+| The document that owns a changed statement is updated | Before a PR that changes behaviour or structure (§13) | **In place** |
+| Manual accessibility pass | Before a PR that changes a rendered surface | Manual |
 
 ### 12.6 Definition of Done
 
@@ -1192,7 +1213,7 @@ verification and, for the last, to counsel.
 | 6 | **Privacy reviewed where applicable** — data minimisation honoured, no personal data in caches, logs or analytics events, no invented retention period |
 | 7 | **Accessibility reviewed** — keyboard operable, non-colour-only meaning, text alternatives, legible at increased text size |
 | 8 | **UX and platform behaviour verified** — matches the UX specification, and behaves identically on Web and the Mini App unless a decision says otherwise |
-| 9 | **Documentation impact checked** — a formal document updated only under §13; `.ai/` marked *Needs review* if it drifted |
+| 9 | **Documentation impact checked** — the formal documents that own the changed statements are updated in the same change (§13); the structure document is updated when the tree moves |
 | 10 | **Diff reviewed** — file by file, not the summary |
 | 11 | **Unresolved items reported** — open questions hit, assumptions made, contradictions found, and what was deliberately not done |
 
@@ -1209,14 +1230,14 @@ Formal documentation remains authoritative throughout implementation.
 | **A formal requirement appears wrong** | Report it with evidence. The owner decides | **Change it to justify the code** |
 | **A product decision is needed** | Open or record the decision **before** changing behaviour | Decide it in code |
 | **An implementation detail needs clarification** | Update the technical document where appropriate, citing the change | Invent a rule in a comment |
-| **`.ai/` becomes stale** | Refresh the affected context files and rebaseline them | Leave a file claiming `Current` against a moved baseline |
+| **The tree moves** | Update `70-engineering/project-structure-v2.md` in the same change; it is the layout authority | Leave a document describing a layout that no longer exists |
 | **A new document seems needed** | Propose it. Most "missing" documents are a section in an existing one | Create a parallel source of truth |
 
 | Rule | Statement |
 | --- | --- |
 | IMP-13.1 | **The implementation agent must never rewrite the specification to make an implementation easier.** This is the single most damaging thing it can do |
 | IMP-13.2 | The documentation defect pattern this corpus has already produced once is **"finding recorded but not applied"**. When a change reveals a defect in another document, **fix that document in the same change**, or the finding will still be there three phases later |
-| IMP-13.3 | `.ai/` is derived. When `docs/` moves, `.ai/` is refreshed and rebaselined — this is now mechanically enforced by `tools/verify-ai-context.py` |
+| IMP-13.3 | **The structure document is derived from the code.** When the tree, the namespace map or the toolchain changes, `70-engineering/project-structure-v2.md` is updated in the same change — a structure document that lags the repository is worse than none, because it is believed |
 | IMP-13.4 | A decision is recorded in **`decision-register.md`** and nowhere else (D-29) |
 
 ---
@@ -1435,7 +1456,8 @@ that does not yet exist.
 
 ## 20. Implementation-agent workflow
 
-The binding ruleset is [`../../.ai/ai-workflow-rules.md`](../../.ai/ai-workflow-rules.md).
+The binding ruleset is the specification set in `docs/` plus
+[`../70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md).
 What follows is the **sequencing-specific** addition: when to run which check,
 so that correctness is continuous and the full gate is not reduced to a
 ritual.
@@ -1443,7 +1465,7 @@ ritual.
 ### 20.1 Before coding
 
 ```text
-read .ai/  (project-overview, plus the area context via source-map)
+read the structure doc      (which layer and area the work belongs to)
    ↓
 identify the formal source   (no source → stop and report)
    ↓
@@ -1492,16 +1514,16 @@ continue
 ```text
 composer validate --strict
    ↓
-composer test            (validate → Rector → Pint → PHPStan → Pest → type coverage)
+composer check           (Pint → PHPStan level max → PHPUnit)
    ↓
-architecture checks      (tests/Arch green; every new namespace covered)
+architecture checks      (tests/Arch green; every new boundary covered)
    ↓
 security checks          (no secret; authorization server-side; nothing sensitive logged)
    ↓
-documentation checks     (tools/verify-docs.py and tools/verify-ai-context.py
-                          when docs/ or .ai/ changed)
+documentation checks     (the document that owns a changed statement is updated;
+                          the structure doc when the tree moved)
    ↓
-Infection                (when domain logic changed)
+Infection                (when domain logic changed — not yet wired)
    ↓
 inspect the diff         file by file
    ↓
@@ -1558,7 +1580,7 @@ If question 1 or question 2 cannot be answered, the correct output is a
 
 | This plan's section | Derived from |
 | --- | --- |
-| §4 Repository baseline | Direct inspection of the working tree; `composer.json`; `tests/Arch/ArchTest.php` |
+| §4 Repository baseline | Direct inspection of the working tree; `composer.json`; [`../70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md) |
 | §5 Implementation principles | [`../30-technical/architecture.md`](../30-technical/architecture.md) §1–§3; [`../30-technical/trd-v1.0.md`](../30-technical/trd-v1.0.md) TD-01…TD-07 |
 | §6 Readiness | [`documentation-audit-v1.0.md`](documentation-audit-v1.0.md) §31–§32 |
 | §7 Dependency graph | [`../30-technical/data-model.md`](../30-technical/data-model.md); [`../30-technical/api-spec-v1.0.md`](../30-technical/api-spec-v1.0.md); [`../20-ux-ui/user-flows-v1.0.md`](../20-ux-ui/user-flows-v1.0.md) |
@@ -1567,13 +1589,13 @@ If question 1 or question 2 cannot be answered, the correct output is a
 | §10 Sequence | §7, plus [`../10-product/roadmap.md`](../10-product/roadmap.md) §1 |
 | §11 Vertical slices | [`../10-product/prd-v1.0.md`](../10-product/prd-v1.0.md) §12 (C-04, C-05, C-08); [`../20-ux-ui/information-architecture-v1.0.md`](../20-ux-ui/information-architecture-v1.0.md) |
 | §12 Testing | [`test-strategy-v1.0.md`](test-strategy-v1.0.md); [`quality-strategy-v1.0.md`](quality-strategy-v1.0.md) |
-| §13 Documentation rules | [`../../.ai/ai-workflow-rules.md`](../../.ai/ai-workflow-rules.md) §5; D-29 |
+| §13 Documentation rules | D-29; [`../70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md) §8 |
 | §14 Security and privacy gates | [`../50-security/`](../50-security/application-security-v1.0.md); [`../55-privacy/privacy-by-design-v1.0.md`](../55-privacy/privacy-by-design-v1.0.md) |
 | §15 Console gate | [`../50-security/authentication-security-v1.0.md`](../50-security/authentication-security-v1.0.md) §9 |
 | §16 Campaign gate | [`../40-operations/advertising-operations-v1.0.md`](../40-operations/advertising-operations-v1.0.md) §4.1, §11; [`production-readiness-v1.0.md`](production-readiness-v1.0.md) §4.7 |
 | §17 Launch gate | [`production-readiness-v1.0.md`](production-readiness-v1.0.md); [`documentation-audit-v1.0.md`](documentation-audit-v1.0.md) §31 |
 | §18 Risks | [`documentation-audit-v1.0.md`](documentation-audit-v1.0.md) §31; [`../50-security/threat-model-v1.0.md`](../50-security/threat-model-v1.0.md) |
-| §20 Workflow | [`../../.ai/ai-workflow-rules.md`](../../.ai/ai-workflow-rules.md); [`../../.ai/code-standards.md`](../../.ai/code-standards.md) |
+| §20 Workflow | [`../70-engineering/project-structure-v2.md`](../70-engineering/project-structure-v2.md) §7, §8; this document §12 |
 
 ## Legal and regulatory references
 

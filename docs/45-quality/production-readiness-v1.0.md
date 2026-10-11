@@ -9,6 +9,12 @@
 | **Owner** | Project owner (Bulbula) |
 | **Supersedes** | — |
 
+> **Structure amendment — 2026-10-11.** Reconciled with the application as
+> built. The authority for the layout is
+> [`project-structure-v2.md`](../70-engineering/project-structure-v2.md). **No
+> requirement, threshold or header was weakened**; what is not wired up yet is
+> marked **not yet in place**, with the milestone that delivers it.
+
 ## Scope
 
 What must be true before Bulbula is exposed to the public: the
@@ -89,11 +95,11 @@ recorded as blocking in a document above this one.
 | # | Criterion | Evidence | Source |
 | --- | --- | --- | --- |
 | 1 | The full quality gate passes on the release commit | CI run | TST §1 |
-| 2 | Architecture tests pass, extended to every new namespace | `tests/Arch` | AC-1, TR-01 |
-| 3 | No framework, ORM, container or broker introduced | ArchTest; dependency list | AC-2 |
-| 4 | `public/` has exactly one executable entry point | ArchTest / feature test | AC-3, TR-09 |
+| 2 | Architecture assertions pass, extended to every new boundary | `tests/Arch` — in place | AC-1, TR-01 |
+| 3 | No framework, ORM or broker introduced; no service location in application code | Architecture assertion — in place (`DependenciesTest`); `composer.json` | AC-2 |
+| 4 | `public/` has exactly one executable entry point | Feature test; architecture assertion — in place (`ConventionsTest`) | AC-3, TR-09 |
 | 5 | Every application service is callable from Web, API and CLI | Tests | AC-4 |
-| 6 | No controller contains SQL, business rules or HTML construction | ArchTest | AC-5 |
+| 6 | No controller contains SQL, business rules or HTML construction | Review; architecture assertion — SQL and outbound-HTTP halves in place (`BoundariesTest`), rules and HTML by review | AC-5 |
 | 7 | All 40 capabilities implemented; each PRD acceptance criterion passes | Test results | AC-6 |
 | 8 | Surface parity holds per `scope-v1.md` §1.5 | Manual + tests | AC-7 |
 | 9 | Discovery works with no session, no cookie interaction, no account | Test | AC-8, GS-1 |
@@ -102,7 +108,7 @@ recorded as blocking in a document above this one.
 | 12 | Every scheduled job runs within its cron window and is idempotent | Job logs | AC-11, TR-150, TR-151 |
 | 13 | **A database restore has been performed successfully in a rehearsal** | Rehearsal record | AC-12, TR-218, BK-4 |
 | 14 | Health and readiness reflect real dependency state | Manual | AC-13, TR-138 |
-| 15 | No secret appears in the repository, logs or error output | gitleaks; log review | AC-14, TR-198 |
+| 15 | No secret appears in the repository, logs or error output | Secret scan — in place (`security.yml`, `.gitleaks.toml`); log review | AC-14, TR-198 |
 | 16 | Coverage and mutation thresholds are not lower than Phase 1's | Config diff | D-26, QS-2.2 |
 
 ### 4.2 Data and content
