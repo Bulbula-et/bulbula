@@ -388,8 +388,9 @@ New assertions arrive with the code they guard, as §2.2 requires: the audit
 trail is append-only (`UPDATE` or `DELETE` against `audit_entries` fails the
 build, while the migration that owns the table is exempt), DDL is confined to
 `backend/Database`, `backend/Repositories` and `database/migrations`, and
-`database/migrations/` is scanned as source. The suite stands at 96 tests and
-2,474 assertions; Pint, PHPStan at level max and PHPUnit are green together.
+`database/migrations/` is scanned as source. That pass left the suite at 96
+tests and 2,474 assertions, with Pint, PHPStan at level max and PHPUnit green
+together.
 
 One thing the slice refused to decide, and one the owner then decided:
 
@@ -401,9 +402,12 @@ One thing the slice refused to decide, and one the owner then decided:
   recording it as nothing, or recording it as the machine it was, the owner
   chose the third. `ActorType::System` is therefore an owner decision, not an
   invention: it is never authenticated, never carries an actor id, and the
-  check that enforces that is in `AuditRecorder`. The prose contradiction in
-  OM §3 is **not** corrected here — it is a requirements document, and it now
-  carries a status note instead of a silent edit.
+  check that enforces that is in `AuditRecorder`. The ambiguous sentence in
+  OM §3 was then **corrected on the owner's instruction (2026-10-11)** — the
+  three-actor rule is the glossary's (Guest, Customer, Staff), the section now
+  says so, and the System row appears in its table. The same one-line
+  clarification was carried to `glossary.md` §1 and `prd-v1.0.md` §8, which
+  state the rule in the same form.
 - **The retention period for audit entries**, which is `PENDING COUNSEL`
   (L-21, D-46) and therefore never invented in code.
 
@@ -413,6 +417,46 @@ This pass also corrected two defects it found in the documents:
 | --- | --- |
 | §4's migration example, `2026_10_11_0001_create_listings.sql`, contradicted architecture §10 and the locator: migrations are `.php` and named `YYYY_MM_DD_HHMMSS_description` | the example now shows the migration that exists |
 | `30-technical/architecture.md` §10 described a `Migration` base class to extend; the contract is an interface, which is what was built | recorded in §10 as a deliberate deviation, with the reason |
+
+### 11.4 Fourth pass — the Identity slice: sessions and sign-in codes (2026-10-11)
+
+The rest of the identity spine, built on the machinery §11.3 delivered. Sources
+of truth are `auth-identity.md` §4.2 and §6 and `data-model.md` §5.1–5.4; the
+rules are cited per file rather than restated here.
+
+| Built | Where | Traces to |
+| --- | --- | --- |
+| Five tables: `customers`, `provider_identities`, `otp_requests`, `sessions`, `rate_limits` | `database/migrations/2026_10_11_1300*` | data-model §5.1–5.4, TD-02, TR-167 |
+| `Email`, `Customer`, `OtpChallenge`, `Session`, `IssuedSession`, `PrincipalType`, `Surface`, `CustomerState` | `backend/Domain/Identity/` | STR-3, LK-2, LK-3 |
+| `CustomerRepository`, `OtpRequestRepository`, `SessionRepository`, `RateLimitRepository` | `backend/Repositories/{Identity,Platform}/` | TR-16 (table ownership), DB-10 |
+| `RateLimiter` | `backend/Security/` | TRD §34, OTP-6 |
+| `RequestOtpService`, `VerifyOtpService`, `SessionService`, `OtpSender` | `backend/Services/Identity/` | C-31, C-30, TD-02, OTP-1…10, S-1…8 |
+| `Row` (typed column reads), `DatabaseTime` (the one datetime format) | `backend/Database/` | level-max static analysis, TR-05 |
+
+**Three things this pass had to decide, and how it decided them:**
+
+- **OTP policy numbers are TRD OT-02 — Open.** The mechanisms are fixed by the
+  spec; the length, window, attempt ceiling and cooldown are not. They are
+  therefore *configuration* (`config/security.php` → `security.otp`, and
+  `OTP_*` in `.env.example`) with provisional defaults inside the cited
+  standard's bounds, not constants. Confirming them in the security phase is a
+  configuration change; no code moves.
+- **Session lifetimes are TRD OT-01 — Open.** Same treatment: `SESSION_LIFETIME`
+  (inactivity) and a new `SESSION_ABSOLUTE_LIFETIME` (the cap S-6 also
+  requires), both provisional, both configuration.
+- **`rate_limits` lives in Platform, not Identity.** It is cross-cutting
+  operational state — the same table serves the review, report and search
+  limits — and Platform already owns cache, jobs and analytics. Recorded here
+  because area placement is a structure decision.
+
+**What is deliberately not built:** sign-in over HTTP. There are no routes, no
+login page and no cookie handling yet, so the services are reachable only from
+tests and the console — and `UndeliverableOtpSender` refuses to pretend a code
+was sent, because the only alternative available today is writing it to a log,
+which OTP-10 forbids. The mail adapter (`Backend\Integrations`, TD-07) and the
+web-facing half of this flow are the next slice.
+
+This pass left the suite at 143 tests and 3,967 assertions.
 
 ---
 

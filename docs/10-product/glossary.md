@@ -31,7 +31,9 @@ copy.
 
 **Rule.** V1 has exactly **three platform actors**: Guest, Customer, Staff
 (split into Operator and Administrator). Any requirement that implies a
-fourth actor is out of scope (D-54).
+fourth actor is out of scope (D-54). **The platform is not an actor in this
+sense** — it has no account and never authenticates; where it acts on its own,
+the audit trail names it as `System` (owner decision, 2026-10-11).
 
 ---
 

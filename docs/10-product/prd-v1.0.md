@@ -219,7 +219,10 @@ and any geographic administration beyond the launch area (`scope-v1.md` §2).
 
 ## 8. Target users
 
-V1 has **three platform actors**. A Business is not a platform user (D-54).
+V1 has **three platform actors**: Guest, Customer and Staff (Operator or
+Administrator). A Business is not a platform user (D-54), and the platform
+itself is not an actor — its own actions are attributed to `System` in the
+audit trail (owner decision, 2026-10-11).
 
 ### 8.1 Guest
 
