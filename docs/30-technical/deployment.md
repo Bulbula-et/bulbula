@@ -422,6 +422,8 @@ storage/
 | PM-6 | Uploaded media is never executable and is never served from a path that can execute PHP (TRD TR-81) |
 | PM-7 | Directories are not world-writable |
 | PM-8 | Runtime storage contents are **disposable** — losing `storage/cache/` or `storage/tmp/` loses nothing (TRD TR-212) |
+| PM-9 | **Every directory on the path from the account's home to the document root must be traversable, and everything the web server serves must be readable, by the user the web server runs as.** `drwxr-x---` anywhere in that chain is `403` for **every** URL on the domain, including `/` — the host's own page, with no application involvement. Check it with `namei -l public/index.php`, which prints the mode of each level |
+| PM-10 | Working modes: directories `755`, files `644`, `.env` `600`, `bin/console` `755`, `storage/` writable by the application user. A blanket `chmod -R 777` satisfies PM-9 by breaking PM-7 and is never the answer |
 
 ---
 
@@ -453,6 +455,20 @@ curl -so /dev/null -w '%{http_code}\n' https://<host>/missing                   
 curl -so /dev/null -w '%{http_code}\n' https://<host>/assets/css/app.css           # 200
 curl -so /dev/null -w '%{http_code}\n' https://<host>/index.php                    # 301 — the rewrite is applied
 ```
+
+**Testing from the server itself: use `--resolve`, not a `Host` header on port 80.**
+Observed on the development host: `curl -H 'Host:<domain>' http://127.0.0.1/…`
+was answered by a **different** virtual host (a default one: `200` for `/`, `404`
+for every real path), while the domain's own address answered `403` for the same
+paths. Port 80 and 443 can be served by different vhosts with different document
+roots, so a local check on port 80 can be confidently wrong.
+
+```bash
+curl -sk -o /dev/null -w '%{http_code}\n' --resolve <host>:443:127.0.0.1 https://<host>/health
+```
+
+That reaches the real vhost over TLS without leaving the machine, and is the
+form to use for every local check in §16.
 
 The last line is the one that tells a misconfigured docroot from a working one:
 `301` means `.htaccess` is honoured and `/health` is answered by the application;
@@ -676,6 +692,31 @@ curl -sI -H 'Host:<domain>' http://127.0.0.1/ | grep -Ei 'HTTP/|server:|x-reques
 `X-Request-Id` present → this application answered. `X-Frame-Options: DENY`
 present → `.htaccess` was read (it is set there, not by PHP). Both absent → the
 request never reached this application at all.
+
+### Every URL answers 403, including `/` and including paths that do not exist
+
+Two causes produce this, and they are told apart in one command.
+
+1. **The served directory is the repository root.** The root `.htaccess` refuses
+   everything on purpose (DR-1), so the guard is doing its job — the *document
+   root* is wrong, or a panel change to it has not reached the running vhost.
+   Signal: the same `403` for a path that could not exist
+   (`/nothing-here-at-all`), and the application's own answer absent.
+2. **A directory on the path is not traversable by the web server's user**
+   (PM-9). Signal: everything is `403`, and `namei -l public/index.php` shows
+   `---` on a level — the project root is often created `drwxr-x---`.
+
+```bash
+cd <domain directory>
+namei -l public/index.php                      # the mode of every level
+ls -ld . public public/assets                  # the ones that matter most
+curl -sk -o /dev/null -w '%{http_code}\n' --resolve <host>:443:127.0.0.1 https://<host>/nothing-here-at-all
+```
+
+If (1): correct the document root and, when a panel was changed and nothing
+followed, re-save it (set it away and back) to force the vhost to be rebuilt.
+If (2): `chmod 755` the directories in the chain, `644` the files, `600` `.env`,
+`755` `bin/console` (PM-10) — never `777`.
 
 ### The home page 500s but `/health` works
 
