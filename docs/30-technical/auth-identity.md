@@ -178,9 +178,9 @@ Resolution on each authentication:
 | LK-3 | **Provider-specific aliasing (dots, plus-addressing) is not treated as equivalence** — guessing causes wrong merges | Fixed |
 | LK-4 | Ambiguity **MUST NOT** silently merge or silently fork. Where the system cannot be sure, it stops and asks | Fixed (C-32) |
 | LK-5 | Linking never silently grants access to another person's Saves or Reviews | Fixed (TRD TR-110) |
-| LK-6 | Whether step 2 links automatically or requires an explicit confirming action | **Open (D-13)** |
-| LK-7 | Whether a Customer may unlink a provider, and what happens if it is their last | **Open (D-13)** |
-| LK-8 | Whether linking is offered proactively in the profile | **Open (D-13)** |
+| LK-6 | Step 2 links **only when the person proves the mailbox** with a code we sent and they entered. An email-code sign-in is itself that proof and needs no second step; a provider's assertion (Google) is not, and does | **Decided (D-13, owner, 2026-10-11)** |
+| LK-7 | A Customer may remove a provider identity, **but never the last one** — an account with no way in is unrecoverable without staff | **Decided (D-13, owner, 2026-10-11)** |
+| LK-8 | Linking is **not** offered proactively in the profile in V1; it happens where it is needed, at sign-in | **Decided (D-13, owner, 2026-10-11)** |
 
 **The architecture accommodates every D-13 outcome** because the link is a
 row, not a column: automatic linking inserts it at step 2, confirmed linking
@@ -191,7 +191,7 @@ schema change, no rewrite (TRD TR-111).
 
 | Case | Behaviour |
 | --- | --- |
-| Google email equals an existing OTP Customer's email | Candidate link — resolution per D-13; **never an automatic merge of data in V1** |
+| Google email equals an existing OTP Customer's email | **Pending link**: a code is sent to the existing address, and the identity is attached only when it is entered (LK-6). No data is merged — one Customer simply gains a second way in |
 | Two existing Customers end up sharing a verified address | Cannot occur: verified email is unique (`data-model.md` §5.1) |
 | A Google account's email changes to one already held by another Customer | Subject identifier wins for sign-in; the address is **not** reassigned; flagged for staff review |
 | A Customer signs in with a provider whose email is unverified | Rejected (GA-3) |

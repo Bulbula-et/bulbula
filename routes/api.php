@@ -17,6 +17,7 @@ return static function (Router $router): void {
     // header, which no page can set on its behalf.
     $auth = 'Bulbula\Api\Controllers\V1\AuthController';
 
+    $router->post('/api/v1/auth/google', [$auth, 'google']);
     $router->post('/api/v1/auth/otp/request', [$auth, 'requestCode']);
     $router->post('/api/v1/auth/otp/verify', [$auth, 'verify']);
     $router->post('/api/v1/auth/logout', [$auth, 'logout']);

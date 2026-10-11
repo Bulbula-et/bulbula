@@ -14,6 +14,7 @@ declare(strict_types=1);
  * @var string|null $error       what went wrong, in plain words
  * @var string      $stage       `request` or `verify`
  * @var string      $email       what the person typed, so they do not retype it
+ * @var string|null $googleClientId  the configured client id, or empty when Google is off
  */
 ?>
 <section class="wrap section sign-in">
@@ -82,3 +83,33 @@ declare(strict_types=1);
         and <a href="<?= e(url('/privacy')) ?>">privacy notice</a>.
     </p>
 </section>
+
+<?php if (($stage ?? 'request') === 'request' && ($googleClientId ?? '') !== ''): ?>
+    <section class="wrap section sign-in">
+        <h2 class="section__title">Or use Google</h2>
+
+        <p class="sign-in__lede">
+            Signing in with Google uses Google's own button. Your email address
+            is still the account — Google only tells us you hold it.
+        </p>
+
+        <div
+            class="g_id_signin"
+            data-type="standard"
+            data-theme="outline"
+            data-size="large"
+            data-text="signin_with"
+            data-shape="rectangular"
+            data-logo_alignment="left"
+            data-ux_mode="redirect"
+            data-login_uri="<?= e(url('/sign-in/google')) ?>"
+            data-client_id="<?= e($googleClientId) ?>"
+        ></div>
+
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+        <p class="sign-in__note">
+            The Google button needs JavaScript from Google. The email code never does.
+        </p>
+    </section>
+<?php endif; ?>

@@ -18,6 +18,9 @@ use Bulbula\Backend\Database\Migrations\MigrationLocator;
 use Bulbula\Backend\Database\Migrations\MigrationRepository;
 use Bulbula\Backend\Database\Migrations\Migrator;
 use Bulbula\Backend\Exceptions\ConfigurationException;
+use Bulbula\Backend\Integrations\Google\GoogleKeySet;
+use Bulbula\Backend\Integrations\Google\GoogleTokenVerifier;
+use Bulbula\Backend\Integrations\Google\StreamJsonFetcher;
 use Bulbula\Backend\Mail\LocalFileMailer;
 use Bulbula\Backend\Repositories\Identity\CustomerRepository;
 use Bulbula\Backend\Repositories\Identity\OtpRequestRepository;
@@ -25,6 +28,7 @@ use Bulbula\Backend\Repositories\Identity\SessionRepository;
 use Bulbula\Backend\Repositories\Platform\RateLimitRepository;
 use Bulbula\Backend\Security\Csrf;
 use Bulbula\Backend\Security\RateLimiter;
+use Bulbula\Backend\Services\Identity\GoogleSignInService;
 use Bulbula\Backend\Services\Identity\MailOtpSender;
 use Bulbula\Backend\Services\Identity\OtpSender;
 use Bulbula\Backend\Services\Identity\RequestOtpService;
@@ -67,6 +71,8 @@ final class Application
     private ?RequestOtpService $otpRequests = null;
 
     private ?VerifyOtpService $otpVerifications = null;
+
+    private ?GoogleSignInService $googleSignIn = null;
 
     private bool $booted = false;
 
@@ -120,6 +126,12 @@ final class Application
     public function otpVerifications(): VerifyOtpService
     {
         return $this->otpVerifications ?? throw new ConfigurationException('The application has not booted.');
+    }
+
+    /** @throws ConfigurationException when read before boot() */
+    public function googleSignIn(): GoogleSignInService
+    {
+        return $this->googleSignIn ?? throw new ConfigurationException('The application has not booted.');
     }
 
     /**
@@ -241,7 +253,7 @@ final class Application
         Env::load($this->basePath);
 
         $config = new Config($this->basePath);
-        $config->load('app', 'database', 'security', 'mail', 'logging');
+        $config->load('app', 'database', 'security', 'mail', 'google', 'logging');
         $this->config = $config;
 
         $debug = $config->bool('app.debug');
@@ -316,6 +328,29 @@ final class Application
             $this->logger,
         );
 
+        // Google sign-in (C-30). The key set is cached on disk, so a normal
+        // request does not touch the network to verify a credential.
+        $this->googleSignIn = new GoogleSignInService(
+            new GoogleTokenVerifier(
+                new GoogleKeySet(
+                    $config,
+                    $clock,
+                    new StreamJsonFetcher(),
+                    $this->logger,
+                    $this->basePath,
+                ),
+                $config,
+                $clock,
+                $this->logger,
+            ),
+            $customers,
+            $this->otpRequests,
+            $this->sessions,
+            new RateLimiter(new RateLimitRepository($connection), $config, $clock, $this->logger),
+            $clock,
+            $this->logger,
+        );
+
         // One line per controller, by hand. A controller that is not listed
         // here cannot be reached, and a route that names one fails loudly.
         $this->kernel = new Kernel(
@@ -331,11 +366,13 @@ final class Application
                     $this->otpRequests(),
                     $this->otpVerifications(),
                     $this->sessions(),
+                    $this->googleSignIn(),
                 ),
                 AuthController::class     => fn (): AuthController => new AuthController(
                     $this->otpRequests(),
                     $this->otpVerifications(),
                     $this->sessions(),
+                    $this->googleSignIn(),
                 ),
             ]),
             $errors,

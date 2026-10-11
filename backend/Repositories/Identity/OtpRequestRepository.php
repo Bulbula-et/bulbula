@@ -9,6 +9,7 @@ use Bulbula\Backend\Database\DatabaseTime;
 use Bulbula\Backend\Database\Row;
 use Bulbula\Backend\Domain\Identity\Email;
 use Bulbula\Backend\Domain\Identity\OtpChallenge;
+use Bulbula\Backend\Domain\Identity\PendingLink;
 use DateTimeImmutable;
 
 /**
@@ -34,11 +35,14 @@ final class OtpRequestRepository
         DateTimeImmutable $expiresAt,
         ?string $sessionBinding,
         ?string $sourceNetwork,
+        ?PendingLink $pendingLink = null,
     ): void {
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE
-            . ' (email, code_hash, issued_at, expires_at, consumed_at, attempts, session_binding, source_network)'
-            . ' VALUES (:email, :code_hash, :issued_at, :expires_at, NULL, 0, :binding, :network)',
+            . ' (email, code_hash, issued_at, expires_at, consumed_at, attempts, session_binding, source_network,'
+            . ' purpose, pending_provider, pending_subject)'
+            . ' VALUES (:email, :code_hash, :issued_at, :expires_at, NULL, 0, :binding, :network,'
+            . ' :purpose, :provider, :subject)',
         );
 
         $statement->execute([
@@ -48,6 +52,9 @@ final class OtpRequestRepository
             'expires_at' => DatabaseTime::format($expiresAt),
             'binding'    => $sessionBinding,
             'network'    => $sourceNetwork,
+            'purpose'    => $pendingLink === null ? OtpChallenge::SIGN_IN : OtpChallenge::LINK,
+            'provider'   => $pendingLink?->provider,
+            'subject'    => $pendingLink?->subject,
         ]);
     }
 
@@ -104,6 +111,9 @@ final class OtpRequestRepository
             consumedAt: DatabaseTime::parse(Row::nullableString($row, 'consumed_at')),
             attempts: Row::int($row, 'attempts'),
             sessionBinding: Row::nullableString($row, 'session_binding'),
+            purpose: Row::string($row, 'purpose'),
+            pendingProvider: Row::nullableString($row, 'pending_provider'),
+            pendingSubject: Row::nullableString($row, 'pending_subject'),
         );
     }
 

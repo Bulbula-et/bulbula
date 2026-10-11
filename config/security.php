@@ -52,6 +52,7 @@ return [
     'rate_limits' => [
         'otp_request' => ['limit' => 5,  'window' => 900],
         'otp_verify'  => ['limit' => 10, 'window' => 900],
+        'google_signin' => ['limit' => (int) Env::get('RATE_LIMIT_GOOGLE_SIGNIN', '20'), 'window' => 900],
         'review'      => ['limit' => 10, 'window' => 3600],
         'report'      => ['limit' => 20, 'window' => 3600],
         'search'      => ['limit' => 120, 'window' => 60],

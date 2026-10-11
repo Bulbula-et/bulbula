@@ -35,5 +35,9 @@ return static function (Router $router): void {
     $router->get('/sign-in', [$signIn, 'show']);
     $router->post('/sign-in/code', [$signIn, 'requestCode']);
     $router->post('/sign-in/verify', [$signIn, 'verify']);
+
+    // Google's redirect flow posts the credential here (C-30). It is a POST
+    // because Google sends one, and the credential is verified server-side.
+    $router->post('/sign-in/google', [$signIn, 'google']);
     $router->post('/sign-out', [$signIn, 'signOut']);
 };

@@ -748,7 +748,7 @@ change or a Category merge (SEO-4, C-23).
 | D-08 | Verification rules and interval | Thresholds are configuration |
 | D-09 | Completeness definition | Stored as derived, unweighted |
 | D-11 | Billing records | Invoice reference only |
-| D-13 | Identity linking | Multiple identities supported; no auto-merge |
+| D-13 | Identity linking | **Closed 2026-10-11:** attach only after the mailbox is proved by a code we sent; removal allowed except the last method; no proactive profile linking in V1 |
 | D-14 | Operator/Administrator split | Permissions as data |
 | D-25 | Media storage and limits | Storage key is adapter-agnostic |
 | D-27 | Analytics granularity and retention | Raw-event policy open |

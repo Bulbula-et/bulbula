@@ -25,7 +25,22 @@ final readonly class OtpChallenge
         public ?DateTimeImmutable $consumedAt,
         public int $attempts,
         public ?string $sessionBinding,
+        public string $purpose = self::SIGN_IN,
+        public ?string $pendingProvider = null,
+        public ?string $pendingSubject = null,
     ) {
+    }
+
+    /** A code that signs somebody in. */
+    public const SIGN_IN = 'sign_in';
+
+    /** A code that attaches a provider identity to the account that answers it (LK-6). */
+    public const LINK = 'link';
+
+    /** Whether accepting this code attaches a provider identity (D-13). */
+    public function isLink(): bool
+    {
+        return $this->purpose === self::LINK;
     }
 
     public function isConsumed(): bool
