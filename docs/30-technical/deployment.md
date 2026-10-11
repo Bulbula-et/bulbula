@@ -693,6 +693,47 @@ curl -sI -H 'Host:<domain>' http://127.0.0.1/ | grep -Ei 'HTTP/|server:|x-reques
 present → `.htaccess` was read (it is set there, not by PHP). Both absent → the
 request never reached this application at all.
 
+### The address answers, but always from somewhere else — the default vhost or DNS
+
+**How to tell the application was never reached.** This application is
+recognisable from outside, so every check has a yes/no answer:
+
+| Request | Answer from this application |
+| --- | --- |
+| `GET /health` | `200` and the body `{"status":"pass"}` |
+| `GET /` | `200` and an HTML page whose title contains **Bulbula** |
+| `GET /nothing-here-at-all` | `404` and an HTML page titled **Page not found — Bulbula** |
+| any response | header `X-Request-Id` |
+
+Anything else — the host's `403`/`404`, a "site under construction" page, a
+control-panel placeholder — means the request never arrived, and no amount of
+configuration inside the project will change that. Two causes, and the evidence
+that separates them:
+
+1. **The domain's DNS does not point at this server.** Observed shape: the
+   **browser** gets one answer (`403`) while a request made on the server to its
+   own public address gets another. Check the A record's **origin** address in
+   the DNS provider, and check for **AAAA** records as well — a stray IPv6 record
+   sends browsers to a different machine while IPv4 looks correct, which is
+   exactly how "it works for me and not for you" starts.
+2. **The vhost does not exist, or is not bound to the address being reached**,
+   so the request is served by a **default vhost** — which is why the same URL
+   answers `403` on one address and `404` on another, and why real files (a probe
+   in `public/`, `public/index.php`) are "not found" although they exist.
+
+```bash
+D=<domain>
+echo "this server's public address:"; curl -s https://ipinfo.io/ip; echo
+echo "what DNS says:";                dig +short A $D @1.1.1.1; dig +short AAAA $D @1.1.1.1
+echo "through the public path:";      curl -sk -o /dev/null -w '%{http_code}\n' https://$D/health
+echo "forced to this machine:";       curl -sk -o /dev/null -w '%{http_code}\n' --resolve $D:443:127.0.0.1 https://$D/health
+```
+
+If the two status codes differ, or neither is `200` with `{"status":"pass"}`, the
+fault is the DNS record or the vhost — not the application, and not `.htaccess`.
+`.htaccess` cannot make a file disappear from a directory the server is not
+serving.
+
 ### Every URL answers 403, including `/` and including paths that do not exist
 
 Two causes produce this, and they are told apart in one command.
