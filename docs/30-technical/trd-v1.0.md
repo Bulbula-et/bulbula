@@ -1175,7 +1175,7 @@ PRD and the register; they are referenced, not duplicated.
 | D-04 | Opening-hours model | Hours schema and open-now evaluation remain provisional |
 | D-08 | Verification rules, tiers, interval | Freshness queue thresholds are configuration-only |
 | D-09 | Completeness definition and ranking weight | Completeness is computed but unweighted |
-| D-13 | Identity-linking rules | Multiple identities are supported; auto-linking is not implemented |
+| D-13 | Identity-linking rules | **Closed 2026-10-11:** a provider identity attaches to an existing Customer only after the person proves the mailbox with a code we sent (email sign-in is itself that proof); removal allowed except the last method; no proactive profile linking in V1 |
 | D-14 | Operator/Administrator split | Permissions exist as data (TD-03); assignment is provisional |
 | D-16 / D-17 | Client-side approach and view layer | Template and enhancement choices pending |
 | D-19 | Dark mode | Theming not designed |

@@ -124,6 +124,13 @@ final class VerifyOtpService
 
         $customer = $this->customerFor($email, $now, $reference);
 
+        // A code may carry a pending identity. Accepting *this* code, sent to
+        // *this* address, is the proof that attaches it (LK-6; D-13 closed
+        // 2026-10-11). Nothing merges: one Customer gains a second way in.
+        if ($challenge->isLink()) {
+            $this->completeLink($challenge, $customer->id, $email, $now, $reference);
+        }
+
         $issued = $this->sessions->start(
             PrincipalType::Customer,
             $customer->id,
@@ -140,10 +147,10 @@ final class VerifyOtpService
     /**
      * The Customer this verified address belongs to, created on first sight.
      *
-     * This is not account *linking* (that is D-13, still open): an email code
-     * proves an address, and the address is the account's own verified
-     * identifier. If it already resolves to a Customer, this signs in to that
-     * Customer and touches nothing else.
+     * An email code proves an address, and a verified address is what makes a
+     * Customer (NA-1). If the address already resolves to one, this signs in to
+     * that Customer and touches nothing else — attaching a *provider* identity
+     * is a separate, explicitly requested act (LK-6, D-13).
      */
     private function customerFor(Email $email, \DateTimeImmutable $now, string $reference): Customer
     {
@@ -162,6 +169,39 @@ final class VerifyOtpService
         $this->customers->touchLastSeen($customer->id, $now);
 
         return $customer;
+    }
+
+    /**
+     * Attach the identity a link code was issued for.
+     *
+     * Guarded three ways: the code must say what to attach, the identity must
+     * not already belong to somebody (a race, or a replay of a link we already
+     * completed), and the insert carries the unique key on (provider, subject)
+     * as the backstop.
+     */
+    private function completeLink(
+        OtpChallenge $challenge,
+        int $customerId,
+        Email $email,
+        \DateTimeImmutable $now,
+        string $reference,
+    ): void {
+        $provider = $challenge->pendingProvider;
+        $subject = $challenge->pendingSubject;
+
+        if ($provider === null || $subject === null) {
+            $this->logger->warning('identity.link_malformed', ['email' => $reference]);
+
+            return;
+        }
+
+        if ($this->customers->findIdentity($provider, $subject) !== null) {
+            return;
+        }
+
+        $this->customers->linkIdentity($customerId, $provider, $subject, $email, $now);
+
+        $this->logger->info('identity.linked', ['provider' => $provider, 'email' => $reference]);
     }
 
     /**

@@ -6,6 +6,7 @@ namespace Bulbula\Backend\Services\Identity;
 
 use Bulbula\Backend\Core\Config;
 use Bulbula\Backend\Domain\Identity\Email;
+use Bulbula\Backend\Domain\Identity\PendingLink;
 use Bulbula\Backend\Exceptions\RateLimitException;
 use Bulbula\Backend\Repositories\Identity\OtpRequestRepository;
 use Bulbula\Backend\Security\RateLimiter;
@@ -43,8 +44,12 @@ final class RequestOtpService
      *
      * @throws RateLimitException when the address, the network or the cooldown refuses the request
      */
-    public function request(Email $email, ?string $sessionBinding = null, ?string $sourceNetwork = null): void
-    {
+    public function request(
+        Email $email,
+        ?string $sessionBinding = null,
+        ?string $sourceNetwork = null,
+        ?PendingLink $pendingLink = null,
+    ): void {
         $now = $this->clock->now();
         $reference = $this->reference($email);
 
@@ -87,6 +92,7 @@ final class RequestOtpService
             $now->modify('+' . $ttl . ' seconds'),
             $sessionBinding,
             $sourceNetwork,
+            $pendingLink,
         );
 
         $this->sender->send($email, $code);

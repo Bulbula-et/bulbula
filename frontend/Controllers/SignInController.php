@@ -16,6 +16,7 @@ use Bulbula\Backend\Exceptions\OtpVerificationException;
 use Bulbula\Backend\Exceptions\RateLimitException;
 use Bulbula\Backend\Exceptions\ValidationException;
 use Bulbula\Backend\Security\Csrf;
+use Bulbula\Backend\Services\Identity\GoogleSignInService;
 use Bulbula\Backend\Services\Identity\RequestOtpService;
 use Bulbula\Backend\Services\Identity\SessionService;
 use Bulbula\Backend\Services\Identity\VerifyOtpService;
@@ -46,7 +47,89 @@ final class SignInController
         private readonly RequestOtpService $codes,
         private readonly VerifyOtpService $verification,
         private readonly SessionService $sessions,
+        private readonly GoogleSignInService $google,
     ) {
+    }
+
+    /**
+     * Google's answer, arriving as a form POST from Google (C-30).
+     *
+     * Google's redirect flow posts the credential here with a CSRF pair of its
+     * own (`g_csrf_token`: one copy in a cookie, one in the body). When the
+     * cookie is present the two must match; when it is absent — a browser that
+     * dropped Google's third-party cookie — the credential is still verified
+     * and the absence is logged, because refusing outright would break sign-in
+     * for those browsers rather than protect anything (the token itself is
+     * signed for our client id).
+     */
+    public function google(Request $request): Response
+    {
+        $this->guardGooglePost($request);
+
+        $credential = $request->trimmed('credential');
+
+        if ($credential === '') {
+            throw new ValidationException(['credential' => 'A Google credential is required.']);
+        }
+
+        // The code that proves the mailbox is bound to this page's token, so
+        // only the browser that asked can complete the link (OTP-7).
+        $token = $this->csrf->newToken();
+
+        $result = $this->google->signIn(
+            $credential,
+            Surface::Web,
+            sessionBinding: $this->csrf->hash($token),
+            sourceNetwork: $this->network($request),
+            userAgent: $request->header('user-agent'),
+        );
+
+        if ($result->needsConfirmation()) {
+            $address = $result->confirmationAddress()->value;
+
+            return $this->page(
+                $request,
+                $token,
+                notice: 'That address already has a Bulbula account. We sent it a code — enter it to connect Google to that account.',
+                stage: 'verify',
+                email: $address,
+            );
+        }
+
+        $issued = $result->issuedSession();
+
+        return Response::redirect('/')
+            ->withCookie($this->sessionCookie($issued->token))
+            ->withCookie($this->csrfCookie($issued->csrfToken));
+    }
+
+    /**
+     * Google's double-submit pair, when Google sent one.
+     *
+     * @throws CsrfTokenMismatchException when the two copies disagree
+     */
+    private function guardGooglePost(Request $request): void
+    {
+        $cookie = $request->cookie('g_csrf_token');
+        $submitted = $request->trimmed('g_csrf_token');
+
+        if ($cookie !== null && !hash_equals($cookie, $submitted)) {
+            throw new CsrfTokenMismatchException();
+        }
+    }
+
+    /** The first configured Google client id, or an empty string when Google is off. */
+    private function googleClientId(): string
+    {
+        foreach (explode(',', $this->config->string('google.client_ids')) as $candidate) {
+            $candidate = trim($candidate);
+
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        return '';
     }
 
     /** The page, with a fresh CSRF token in a cookie and in the form. */
@@ -213,6 +296,7 @@ final class SignInController
                 'error'     => $error,
                 'stage'     => $stage,
                 'email'     => $email ?? $request->trimmed('email'),
+                'googleClientId' => $this->googleClientId(),
             ]),
         ], $status);
 

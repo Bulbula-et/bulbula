@@ -10,6 +10,7 @@ use Bulbula\Backend\Domain\Identity\Email;
 use Bulbula\Backend\Domain\Identity\Surface;
 use Bulbula\Backend\Exceptions\AuthenticationRequiredException;
 use Bulbula\Backend\Exceptions\ValidationException;
+use Bulbula\Backend\Services\Identity\GoogleSignInService;
 use Bulbula\Backend\Services\Identity\RequestOtpService;
 use Bulbula\Backend\Services\Identity\SessionService;
 use Bulbula\Backend\Services\Identity\VerifyOtpService;
@@ -27,10 +28,10 @@ use InvalidArgumentException;
  * - **The token is the response.** A client keeps it and sends it back; the
  *   server keeps only its hash (S-3).
  *
- * `POST /auth/google`, `/auth/telegram/context` and `GET /auth/session` are not
- * built: the first needs the Google adapter, the second is a surface signal
- * whose relationship to identity is open (D-33), and the third reports the
- * capabilities of the permission model, which is the next slice.
+ * `/auth/telegram/context` and `GET /auth/session` are not built: the first is
+ * a surface signal whose relationship to identity is open (D-33), and the
+ * second reports the capabilities of the permission model, which is the next
+ * slice.
  */
 final class AuthController
 {
@@ -38,7 +39,66 @@ final class AuthController
         private readonly RequestOtpService $codes,
         private readonly VerifyOtpService $verification,
         private readonly SessionService $sessions,
+        private readonly GoogleSignInService $google,
     ) {
+    }
+
+    /**
+     * Exchange a Google credential for a session (C-30, GA-1…GA-6).
+     *
+     * Two answers are possible, and both are honest about what happened:
+     *
+     * - **201** — the credential verified and a session token is returned.
+     * - **202** — the credential verified, but its address already belongs to a
+     *   Customer. The identity is not attached until that mailbox proves
+     *   itself, so a code has been sent and the client continues at
+     *   `/auth/otp/verify` (LK-6, D-13 closed 2026-10-11). 202 rather than 200
+     *   because the request is accepted, not finished.
+     *
+     * A credential that fails verification is a 401 with one message (GA-2).
+     */
+    public function google(Request $request): Response
+    {
+        $credential = $request->trimmed('credential');
+
+        if ($credential === '') {
+            throw new ValidationException(['credential' => 'A Google credential is required.']);
+        }
+
+        $result = $this->google->signIn(
+            $credential,
+            Surface::Api,
+            sourceNetwork: $request->clientIp,
+            userAgent: $request->header('user-agent'),
+        );
+
+        if ($result->needsConfirmation()) {
+            return Response::json([
+                'status'  => 'confirm_required',
+                'email'   => $this->mask($result->confirmationAddress()->value),
+                'message' => 'Enter the code we sent to that address to connect Google to the account it belongs to.',
+            ], 202)->withHeader('Cache-Control', 'no-store');
+        }
+
+        $issued = $result->issuedSession();
+
+        return Response::json([
+            'token'      => $issued->token,
+            'expires_at' => $issued->session->expiresAt->format(DATE_ATOM),
+            'surface'    => $issued->session->surface->value,
+        ], 201)->withHeader('Cache-Control', 'no-store');
+    }
+
+    /** `sara@example.com` → `s***@example.com`: enough to recognise, not enough to harvest. */
+    private function mask(string $address): string
+    {
+        $at = strpos($address, '@');
+
+        if ($at === false || $at === 0) {
+            return '***';
+        }
+
+        return substr($address, 0, 1) . '***' . substr($address, $at);
     }
 
     /**
