@@ -42,6 +42,35 @@ final class BoundariesTest extends TestCase
     ];
 
     /**
+     * Two sign-in methods and no others (D-48, AI-1, AI-3, AI-5, TR-32).
+     *
+     * Adding a provider is a product decision, not a technical one, so the
+     * code is not allowed to grow a third quietly. Telegram is absent on
+     * purpose: it is a surface, not a provider (AI-4).
+     */
+    #[Test]
+    public function no_authentication_mechanism_is_added_beyond_the_approved_two(): void
+    {
+        // Quoted literals, not substrings: `-apple-system` in a font stack is
+        // not an authentication provider, and a test that says it is would be
+        // turned off within a week.
+        $forbidden = ['facebook', 'apple', 'magic-link', 'sms', 'whatsapp', 'truecaller'];
+        $offenders = [];
+
+        foreach (SourceFiles::in(...SourceFiles::ROOTS) as $file) {
+            $code = strtolower(SourceFiles::withoutComments($file));
+
+            foreach ($forbidden as $mechanism) {
+                if (str_contains($code, "'" . $mechanism . "'") || str_contains($code, '"' . $mechanism . '"')) {
+                    $offenders[] = SourceFiles::relative($file) . ' names the provider ' . $mechanism;
+                }
+            }
+        }
+
+        self::assertSame([], $offenders, 'Only Google and email OTP are approved (D-48).');
+    }
+
+    /**
      * The audit trail records what happened; nothing rewrites it (OM-6.2,
      * OPX-12.2). The migrations are excluded on purpose — they own whether the
      * table exists, which is not the same as owning its rows.

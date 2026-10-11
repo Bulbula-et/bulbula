@@ -23,6 +23,12 @@ final class ConsoleCommandsTest extends ApplicationTestCase
 
     private ?Application $booted = null;
 
+    /** The repository root, so the test can count the migrations it ships. */
+    private function basePath(): string
+    {
+        return dirname(__DIR__, 3);
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -50,13 +56,19 @@ final class ConsoleCommandsTest extends ApplicationTestCase
     }
 
     #[Test]
-    public function migrate_applies_the_shipped_migration_and_is_idempotent(): void
+    public function migrate_applies_every_shipped_migration_and_is_idempotent(): void
     {
         $first = $this->capture();
 
         self::assertSame(0, $this->console(['migrate'], $first));
         self::assertStringContainsString('2026_10_11_120000_create_audit_entries.php', $first->stdout);
-        self::assertStringContainsString('1 migration(s) applied', $first->stdout);
+        self::assertStringContainsString('2026_10_11_130000_create_customers.php', $first->stdout);
+
+        // The count is asserted against the files on disk, not against a
+        // number in this test, so adding a migration does not break it.
+        $shipped = count(glob($this->basePath() . '/database/migrations/*.php') ?: []);
+
+        self::assertStringContainsString($shipped . ' migration(s) applied', $first->stdout);
         self::assertSame('', $first->stderr);
 
         $second = $this->capture();
@@ -84,9 +96,13 @@ final class ConsoleCommandsTest extends ApplicationTestCase
         $this->console(['migrate'], $this->capture());
         $output = $this->capture();
 
+        $shipped = count(glob($this->basePath() . '/database/migrations/*.php') ?: []);
+
         self::assertSame(0, $this->console(['rollback'], $output));
+        // Everything applied in one batch reverts as one batch, newest first.
+        self::assertStringContainsString('reverted 2026_10_11_130400_create_rate_limits.php', $output->stdout);
         self::assertStringContainsString('reverted 2026_10_11_120000_create_audit_entries.php', $output->stdout);
-        self::assertStringContainsString('1 migration(s) reverted', $output->stdout);
+        self::assertStringContainsString($shipped . ' migration(s) reverted', $output->stdout);
 
         $status = $this->capture();
         self::assertSame(0, $this->console(['migration:status'], $status));

@@ -116,19 +116,24 @@ have no account through which to object.
 
 ## 3. Actors
 
-> **Status note (2026-10-11).** The prose below ("exactly three platform
-> actors. There is no fourth.") has never matched this section's own table,
-> which lists four actors plus a Business owner marked *not a platform actor*
-> (D-54). The build records five actor types, adding **`System`** for actions
-> the platform takes by itself — a scheduled job or a retention sweep — on the
-> owner's decision of 2026-10-11: recording such an action as a named
-> Administrator would blame a person for what a machine did, and recording
-> nothing would leave a change to live data unaudited. `System` is not an
-> account and never carries an actor id. This note records the decision; the
-> prose and the table are left as written, because correcting a requirements
-> document is the owner's edit, not the build's.
+> **Amended 2026-10-11, on the owner's instruction.** The sentence below read
+> "exactly three platform actors. There is no fourth." over a table that lists
+> four rows. The counting was the glossary's — Guest, Customer and Staff, with
+> Staff split into Operator and Administrator in the table — and the sentence
+> now says so. The **System** row is new: an action the platform takes by
+> itself (a scheduled job, a retention sweep) is attributed to the platform,
+> never to a person who did not do it, and never left unrecorded. The same
+> clarification is carried by `10-product/glossary.md` §1 and
+> `10-product/prd-v1.0.md` §8, which state the rule in the same three-actor
+> form.
 
-V1 has exactly three platform actors. There is no fourth.
+V1 has exactly three platform actors: **Guest**, **Customer** and **Staff**
+(Operator or Administrator). There is no fourth. A Business owner is not a
+platform actor (D-54), and neither is any other person outside those three.
+
+The platform itself is not an actor in this sense — it has no account and never
+authenticates. Where it acts on its own, the audit trail names it as
+**System**.
 
 | Actor | Authentication | Role in operations |
 | --- | --- | --- |
@@ -136,6 +141,7 @@ V1 has exactly three platform actors. There is no fourth.
 | **Customer** | Google or email OTP (D-48) | Writes Reviews, reports Reviews, raises privacy requests |
 | **Operator** | Staff credentials — strength **Open (D-45)** | Performs collection, creation, verification, moderation, report handling, campaign creation |
 | **Administrator** | Staff credentials — strength **Open (D-45)** | Higher-risk actions: taxonomy, locations, campaign approval, staff accounts, audit access, legal escalation, data requests |
+| **System** | None — not an account | Platform-initiated actions: scheduled jobs, retention sweeps, automated state changes. The actor recorded on their audit entries (owner decision, 2026-10-11) |
 | **Business owner** | — | **Not a platform actor (D-54).** Interacts offline or through the public correction route |
 
 | ID | Rule | Source |

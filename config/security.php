@@ -7,7 +7,12 @@ use Bulbula\Backend\Core\Env;
 return [
     'session' => [
         'cookie'   => Env::get('SESSION_COOKIE', 'bulbula_session'),
+        // Inactivity window: a session untouched for this long is over.
         'lifetime' => Env::int('SESSION_LIFETIME', 1200),
+        // Absolute cap, however active the session is. Both exist (S-6); the
+        // values are **TRD OT-01 — Open — technical decision**, hence
+        // configuration rather than a constant.
+        'absolute_lifetime' => Env::int('SESSION_ABSOLUTE_LIFETIME', 1209600),
         'samesite' => 'Lax',
         // Cookies are Secure everywhere except local development over http.
         'secure'   => Env::get('APP_ENV', 'production') !== 'local',
@@ -17,8 +22,32 @@ return [
         'enabled' => Env::bool('CSRF_ENABLED', true),
     ],
 
+    /*
+     * Email one-time code policy.
+     *
+     * The *mechanisms* are fixed by `docs/30-technical/auth-identity.md` §4.2
+     * (OTP-1 … OTP-10). These numbers are **TRD OT-02 — Open — technical
+     * decision**, due to be confirmed in the security phase; they are here, and
+     * not in code, so that confirming them is a configuration change
+     * (TRD TR-196). The defaults below are placeholders that sit inside the
+     * cited standard's bounds — R-25 caps out-of-band completion at ten
+     * minutes — and no response ever discloses them.
+     */
+    'otp' => [
+        'length'          => Env::int('OTP_LENGTH', 6),
+        'ttl'             => Env::int('OTP_TTL', 600),
+        'max_attempts'    => Env::int('OTP_MAX_ATTEMPTS', 5),
+        'resend_cooldown' => Env::int('OTP_RESEND_COOLDOWN', 60),
+    ],
+
     // Requests allowed per window, per source. These are configuration, never
     // constants, and the numbers are never disclosed in a response.
+    //
+    // `otp_request` is applied twice — once keyed by the address, once by the
+    // source network — because OTP-6 limits both. One bucket therefore means
+    // one ceiling for both dimensions; a shared network (carrier NAT, an
+    // office) reaching the ceiling would need a second bucket here rather than
+    // a code change. That trade-off is recorded for OT-02.
     'rate_limits' => [
         'otp_request' => ['limit' => 5,  'window' => 900],
         'otp_verify'  => ['limit' => 10, 'window' => 900],

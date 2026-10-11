@@ -17,6 +17,15 @@ use Bulbula\Backend\Database\Migrations\MigrationLocator;
 use Bulbula\Backend\Database\Migrations\MigrationRepository;
 use Bulbula\Backend\Database\Migrations\Migrator;
 use Bulbula\Backend\Exceptions\ConfigurationException;
+use Bulbula\Backend\Repositories\Identity\CustomerRepository;
+use Bulbula\Backend\Repositories\Identity\OtpRequestRepository;
+use Bulbula\Backend\Repositories\Identity\SessionRepository;
+use Bulbula\Backend\Repositories\Platform\RateLimitRepository;
+use Bulbula\Backend\Security\RateLimiter;
+use Bulbula\Backend\Services\Identity\RequestOtpService;
+use Bulbula\Backend\Services\Identity\SessionService;
+use Bulbula\Backend\Services\Identity\UndeliverableOtpSender;
+use Bulbula\Backend\Services\Identity\VerifyOtpService;
 use Bulbula\Backend\Support\Health\HealthChecker;
 use Bulbula\Backend\Support\LoggerFactory;
 use Bulbula\Backend\Support\SystemClock;
@@ -46,6 +55,12 @@ final class Application
     private ?Migrator $migrator = null;
 
     private ?CommandRunner $console = null;
+
+    private ?SessionService $sessions = null;
+
+    private ?RequestOtpService $otpRequests = null;
+
+    private ?VerifyOtpService $otpVerifications = null;
 
     private bool $booted = false;
 
@@ -81,6 +96,24 @@ final class Application
     public function migrator(): Migrator
     {
         return $this->migrator ?? throw new ConfigurationException('The application has not booted.');
+    }
+
+    /** @throws ConfigurationException when read before boot() */
+    public function sessions(): SessionService
+    {
+        return $this->sessions ?? throw new ConfigurationException('The application has not booted.');
+    }
+
+    /** @throws ConfigurationException when read before boot() */
+    public function otpRequests(): RequestOtpService
+    {
+        return $this->otpRequests ?? throw new ConfigurationException('The application has not booted.');
+    }
+
+    /** @throws ConfigurationException when read before boot() */
+    public function otpVerifications(): VerifyOtpService
+    {
+        return $this->otpVerifications ?? throw new ConfigurationException('The application has not booted.');
     }
 
     /**
@@ -209,6 +242,33 @@ final class Application
         );
 
         $this->logger = LoggerFactory::create($config, $this->basePath);
+
+        // Identity: sessions, sign-in codes and the limits on them. The sender
+        // is the placeholder that refuses (OTP-10) until Backend\Integrations
+        // speaks to the mail provider (D-41) — see UndeliverableOtpSender.
+        $customers = new CustomerRepository($connection);
+        $otpRequestRows = new OtpRequestRepository($connection);
+
+        $this->sessions = new SessionService(new SessionRepository($connection), $config, $clock);
+
+        $this->otpRequests = new RequestOtpService(
+            $otpRequestRows,
+            new RateLimiter(new RateLimitRepository($connection), $config, $clock, $this->logger),
+            new UndeliverableOtpSender(),
+            $config,
+            $clock,
+            $this->logger,
+        );
+
+        $this->otpVerifications = new VerifyOtpService(
+            $otpRequestRows,
+            $customers,
+            $this->sessions,
+            new RateLimiter(new RateLimitRepository($connection), $config, $clock, $this->logger),
+            $config,
+            $clock,
+            $this->logger,
+        );
 
         // One line per controller, by hand. A controller that is not listed
         // here cannot be reached, and a route that names one fails loudly.

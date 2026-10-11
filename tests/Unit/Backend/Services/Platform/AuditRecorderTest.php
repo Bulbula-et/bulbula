@@ -159,26 +159,29 @@ final class AuditRecorderTest extends TestCase
     }
 
     #[Test]
-    public function the_shipped_migration_applies_and_reverts_on_the_test_engine(): void
+    public function the_audit_table_has_no_updating_or_deleting_code_path(): void
     {
-        // Migration portability (TR-175): the file that will run on MariaDB
-        // runs, unchanged, on the engine the suite uses.
-        $connection = $this->connection();
-        $repository = new MigrationRepository($connection);
-        $migrator = new Migrator(
-            $connection,
-            new MigrationLocator(dirname(__DIR__, 5) . '/database/migrations'),
-            $repository,
-            new SystemClock(),
+        // Append-only is a property of the schema as much as of the class: the
+        // shipped migration has no column, and no statement anywhere, that
+        // rewrites a row (OM-6.2). The architecture suite asserts the code
+        // side; this asserts the reason the code side is possible.
+        self::assertTrue($this->connection()->hasTable('audit_entries'));
+
+        $statement = $this->connection()->pdo()->query('PRAGMA table_info(audit_entries)');
+        $columns = [];
+
+        foreach ($statement as $column) {
+            $columns[] = (string) $column['name'];
+        }
+
+        self::assertSame(
+            ['id', 'occurred_at', 'actor_type', 'actor_id', 'action', 'target_type', 'target_id', 'reason'],
+            $columns,
+            'no updated_at, no deleted_at: nothing to record a later opinion in.',
         );
 
-        self::assertTrue($connection->hasTable('audit_entries'));
-
-        self::assertSame(['2026_10_11_120000_create_audit_entries.php'], $migrator->rollback());
-        self::assertFalse($connection->hasTable('audit_entries'));
-
-        self::assertSame(['2026_10_11_120000_create_audit_entries.php'], $migrator->apply());
-        self::assertTrue($connection->hasTable('audit_entries'));
+        // The whole-migration apply/revert contract is asserted once, over
+        // every shipped file, in tests/Unit/Backend/Database/ShippedMigrationsTest.
     }
 
     /** The recorder under test, against a migrated in-memory database. */
