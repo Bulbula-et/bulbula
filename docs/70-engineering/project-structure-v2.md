@@ -511,6 +511,71 @@ bug: the production code was behaving correctly.
 
 This pass left the suite at 162 tests and 4,768 assertions.
 
+### 11.6 Sixth pass — Google sign-in, and D-13 answered (2026-10-11)
+
+The sixth pass adds the second sign-in method and closes the last open
+identity-linking decision. Sources of truth are `auth-identity.md` §4.1 (GA-1…GA-6)
+and §5.1–5.3 (LK-1…LK-8, collisions), `api-spec-v1.0.md` §3.1, `trd-v1.0.md`
+(D-13, D-48, TR-32/104/110/111) and Google's own published verification guide —
+Google is the only external party in the product so far whose rules are not ours
+to set, so they are cited by URL in the integration rather than paraphrased.
+
+| Built | Where | Traces to |
+| --- | --- | --- |
+| `config/google.php` (`client_ids` from `GOOGLE_CLIENT_IDS`, `issuers`, `jwks_url`, `keys_ttl`, `keys_cache`, `max_token_age`, `clock_leeway`) | `config/` | GA-2, TR-110 |
+| `GoogleKeySet` (disk cache under `storage/tmp/keys/`, JWK `n`/`e` → PEM via hand-rolled DER), `JsonFetcher`/`StreamJsonFetcher` | `backend/Integrations/Google/` | GA-1, GA-6 |
+| `GoogleTokenVerifier`, `GoogleIdToken` | `backend/Integrations/Google/` | GA-2…GA-5 |
+| `GoogleSignInService`, `GoogleSignInResult`, `PendingLink`, `ProviderCredentialRejectedException` | `backend/Services/Identity/`, `backend/Domain/Identity/`, `backend/Exceptions/` | §5.1, §5.3 |
+| `purpose` + pending-identity columns on `otp_requests`; link completion in `VerifyOtpService` | `database/migrations/2026_10_11_150000_…`, `backend/Services/Identity/` | LK-6 |
+| `POST /sign-in/google`, Google button on `pages/sign-in.php` | `frontend/`, `routes/web.php` | C-30, C-31 |
+| `POST /api/v1/auth/google` (201 / 202 `confirm_required` / 401) | `api/Controllers/V1/`, `routes/api.php` | api-spec §3.1 |
+
+**What this pass had to decide, and how it decided it:**
+
+- **The verifier checks the signature before it reads a single claim.** A
+  payload is unauthenticated bytes until the signature over it is Google's; the
+  order in `GoogleTokenVerifier::verify()` is therefore signature, issuer,
+  audience, time, then `email_verified`. `alg` is read from the token, so the
+  accepted set is an allow-list of exactly `RS256` — `none` and the HMAC
+  confusion class cannot be selected by the attacker.
+- **The audience is a list, because the product has more than one client.**
+  "Mobile" means Mini App, mobile browser and a native app (owner, 2026-10-11),
+  and each may have its own client id. `GOOGLE_CLIENT_IDS` is a comma-separated
+  list checked with `in_array(..., true)`; adding an iOS client is configuration,
+  not a code change, and "any Google token" is never accepted.
+- **The link intent lives on the code, not in a new table.** A pending Google
+  identity is stored on the `otp_requests` row that carries it (`purpose`,
+  pending provider/subject/address): one code path, one set of rate limits, one
+  expiry rule, and no way for the link flow to become a weaker second way into
+  an account than ordinary sign-in. LK-1…LK-5 and §5.3 are untouched — nothing
+  merges Customers, and no Saves or Reviews move.
+- **Google's cross-site token is checked only when Google sends one.** The
+  HTML API's `g_csrf_token` cookie/body pair is enforced when the cookie is
+  present; a request that arrives without it is still authenticated by the ID
+  token itself, which is the actual credential. This keeps the manual/API path
+  and the button path on the same rule.
+- **An unconfigured deployment shows no button at all.** With no client id the
+  sign-in page renders email codes alone rather than a control that cannot work
+  — the same reasoning as §11.5's `UndeliverableOtpSender`: a half-configured
+  environment behaves as if the feature were not there, and says so in the log.
+
+**Defect found and fixed while testing this pass:** the hand-rolled JWK → PEM
+conversion was wrong twice — the `AlgorithmIdentifier` was double-wrapped in a
+SEQUENCE, and the RSA key was appended to the SubjectPublicKeyInfo body instead
+of being placed inside a BIT STRING. Both produced the same symptom
+(`openssl_verify(): Supplied key param cannot be coerced into a public key`).
+These were real product defects that a mock-based test would have missed, and
+they are the argument for the pass having generated a real key pair: signature
+verification is exercised as cryptography, offline.
+
+**What is deliberately not built:** removal of a sign-in method and the
+profile's sign-in-methods screen (LK-7/LK-8 decided 2026-10-11, not in this
+slice), `POST /auth/telegram/context` (D-33), `/auth/session` (TD-03), staff
+sign-in (D-45). No legacy Telegram login widget: Telegram remains a surface
+signal only (TR-32, AI-4, D-48).
+
+This pass left the suite at 183 tests and 5,493 assertions.
+
 ---
 
 *Companion records: `php-application-structure-v1.0.md` (superseded; its feature
