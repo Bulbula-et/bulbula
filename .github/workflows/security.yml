@@ -25,18 +25,35 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Full history: a secret that was committed and then deleted is still
           # a secret that leaked (REL-3.7).
           fetch-depth: 0
 
-      - name: Scan
-        uses: gitleaks/gitleaks-action@v2
+      - name: Install gitleaks
+        # The gitleaks *binary* is MIT-licensed and free. The gitleaks *action*
+        # refuses to run for an organization-owned repository without a paid
+        # license key ("[Bulbula-et] is an organization. License key is
+        # required."), which is a gate that cannot pass on a free plan for no
+        # security benefit. The pinned, checksum-verified release binary does
+        # the same scan with the same configuration and no dependency on a
+        # third-party licence — do not swap it back for the action.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-          # GITLEAKS_LICENSE is required for organization repositories only.
+          GITLEAKS_VERSION: '8.28.0'
+          GITLEAKS_SHA256: 'a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb'
+        run: |
+          set -euo pipefail
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+
+      - name: Scan the tracked tree and the full history
+        # Exit code 1 on any finding, which fails the job. --redact keeps a
+        # leaked value out of the build log, which is itself a publication.
+        run: ./gitleaks git . --config .gitleaks.toml --no-banner --redact
 
   dependencies:
     name: Dependency audit
@@ -44,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2

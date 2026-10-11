@@ -1,8 +1,8 @@
 name: CI
 
-# The gate the quality strategy names: format, then types, then tests.
-# Local `composer check` runs exactly the same three steps in the same order,
-# so a green laptop is a green pipeline.
+# The gate the quality strategy names. The lock file is verified first, then
+# format, types and tests; local `composer check` runs those three in the same
+# order, so a green laptop is a green pipeline.
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
