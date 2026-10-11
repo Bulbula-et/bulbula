@@ -563,6 +563,31 @@ The application is running — `/` is the directory index — but nothing else
 reaches it, so the paths that exist (`/health`, `/sign-in`) are indistinguishable
 from paths that do not. The rewrite is not being applied. In order of likelihood:
 
+**First, establish where the document root actually is** — it is the answer to
+most of these symptoms and it cannot be assumed from a control panel. Two files
+with unique names, one in the domain directory and one in `public/`, asked for by
+path:
+
+```bash
+cd <domain directory>
+echo root   > ZZZ-root.txt
+echo public > public/ZZZ-public.txt
+for p in ZZZ-root.txt ZZZ-public.txt public/ZZZ-public.txt index.php; do
+  printf '%-22s ' "$p"; curl -so /dev/null -w '%{http_code}\n' -H 'Host:<domain>' http://127.0.0.1/$p
+done
+rm -f ZZZ-root.txt public/ZZZ-public.txt
+```
+
+| Result | Meaning |
+| --- | --- |
+| `ZZZ-public.txt` → `200` | the document root **is** `public/` — go to 1 below |
+| `ZZZ-root.txt` → `200` | the document root is the **repository root**: the site is serving application source, and only the root `.htaccess` deny stands between it and the internet. Fix the vhost first (DR-3), then continue |
+| both → `404` | the document root is **neither** — some other directory is being served. Fix that first; nothing below can be diagnosed until it is |
+
+`index.php` in the same loop is the check that needs no interpretation: **it is a
+real file, so it can never be a plain 404.** A `404` for it means the request is
+not being served from `public/` at all, whatever the panel says.
+
 1. **`.htaccess` is not read at all.** `AllowOverride None` (or an equivalent
    LiteSpeed setting) for that document root: Apache ignores the whole file, so
    the rewrite, the dotfile deny and the security headers are all inert. Prove it
@@ -575,10 +600,12 @@ from paths that do not. The rewrite is not being applied. In order of likelihood
    ```
 
    `403` means the file **is** read (the `.md` deny matched) → go to 2. `200`
-   means the file is not read at all → the host must enable overrides
-   (`AllowOverride FileInfo Options AuthConfig`, or `All`) for the document root.
-   Nothing in the application can work around this; it is a one-line support
-   request.
+   means the file is served although the rules refuse it, so the file is not read
+   at all → the host must enable overrides (`AllowOverride FileInfo Options
+   AuthConfig`, or `All`) for the document root. A `404` means the file was never
+   found, so the document root is not `public/` — see the table above.
+   Nothing in the application can work around any of this; it is a one-line
+   support request.
 2. **`.htaccess` is read but `mod_rewrite` is unavailable**, so the
    `<IfModule mod_rewrite.c>` guard skips the whole block. Same evidence as
    (1) `403`, plus a `/index.php` request that returns `404` **with this
@@ -593,9 +620,23 @@ from paths that do not. The rewrite is not being applied. In order of likelihood
 curl -sI -H 'Host:<domain>' http://127.0.0.1/ | grep -Ei 'HTTP/|server:|x-request-id|x-frame-options'
 ```
 
-`X-Request-Id` present → this application answered. `X-Frame-Options: DENY`
-present → `.htaccess` was read (it is set there, not by PHP). Both absent → the
-request never reached this application at all.
+`X-Request-Id` present → this application answered (`Kernel::handle()` is the only
+code that sets it). `X-Frame-Options: DENY` present → the shipped `.htaccess` was
+read: no PHP in this project sets that header, and **a different value means the
+header came from somewhere else** (a host-level default, commonly
+`SAMEORIGIN`). Both absent → the request never reached this application.
+
+**Compare port 80 with the port the public actually uses.** A host can serve a
+different virtual host — and a different document root — on 80 and 443, which is
+how a site answers `200` to a local check and `403` in a browser:
+
+```bash
+curl -sI -H 'Host:<domain>' http://127.0.0.1/ | head -1
+curl -skI --resolve <domain>:443:127.0.0.1 https://<domain>/ | head -1
+```
+
+If those two disagree, the disagreement *is* the fault, and it is the host's to
+fix.
 
 ### `/` answers but every other path shows the hosting provider's own 404 page
 

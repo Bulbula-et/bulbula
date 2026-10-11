@@ -28,3 +28,9 @@
 
 # tool caches (PHPStan, PHPUnit)
 .cache/
+
+# Host artifacts: cPanel/LiteSpeed PHP writes one error_log per directory it
+# executes code in. It is not ours, it is never committed, and it can contain
+# paths and request data from the host.
+error_log
+*.log
