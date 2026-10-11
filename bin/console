@@ -11,6 +11,7 @@ declare(strict_types=1);
  */
 
 use Bulbula\Backend\Core\Application;
+use Bulbula\Backend\Core\Env;
 
 define('BASE_PATH', dirname(__DIR__));
 
@@ -26,6 +27,12 @@ require $autoload;
 try {
     $application = new Application(BASE_PATH);
     $application->boot();
+
+    if (!Env::fileFound()) {
+        fwrite(STDERR, 'Note: no .env file in ' . BASE_PATH . '. The application is running on '
+            . 'environment variables and defaults only — `.env.example` is a document and is '
+            . 'never read.' . PHP_EOL);
+    }
 
     $status = $application->console()->run($argv);
 } catch (Throwable $error) {

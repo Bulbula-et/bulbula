@@ -149,14 +149,16 @@ asked for — which is what the router matches on.
 > working tree deletes it, and every PHP URL then 500s under an older
 > interpreter — on this host the default shell interpreter is 8.2 (§2).
 >
-> **Status 2026-10-11: the block is not yet in this repository.** The
-> intention is unchanged — the block belongs here, and this is the copy to
-> change when the PHP version changes. Until it is captured and committed, the
-> deployed copy is protected with `git update-index --skip-worktree
-> public/.htaccess`: a `reset --hard` honours that bit (verified 2026-10-11),
-> so the host-generated block survives the ten-minute refresh of §7.1. That is
-> a local measure on one host, not a substitute for committing the block; it is
-> listed in §18.
+> **Status 2026-10-11 — settled on the live host.** The development host prints
+> `public/.htaccess` exactly as this repository ships it: **no cPanel-generated
+> handler block is written there at all.** On that host the interpreter is chosen
+> per domain in cPanel's MultiPHP Manager (`PHP 8.4` selected), not by a handler
+> in the file, so the reset in §7.1 cannot take PHP down with it and the
+> repository copy is authoritative as written. The interim
+> `git update-index --skip-worktree public/.htaccess` is therefore **withdrawn** —
+> it would hide exactly the updates this file is meant to receive. Should a host
+> ever grow such a block, capture it and commit it; the paragraph above remains
+> the rule for that case, and it is no longer listed as open.
 
 ---
 
@@ -327,6 +329,11 @@ cd /home/arkeonet/public_html/bulbula.arkeonethiopia.com \
        --no-dev --prefer-dist --no-interaction --optimize-autoloader \
   >> /home/arkeonet/bulbula-deploy.log 2>&1
 ```
+
+**Verified on the host 2026-10-11:** the two tracked-file conditions this
+sequence depends on hold — the tree is the repository root (the duplicate clone
+inside it was removed), and `.env` is untracked, so `reset --hard` neither
+discards configuration nor deletes it.
 
 The repository root is exactly the directory in that command — **one copy
 only**. A second `git clone` *inside* it creates `bulbula/`: an unmanaged
@@ -587,8 +594,8 @@ broken part — this is the split working as designed.
 | L-21 | Retention of backups and logs | **PENDING COUNSEL** |
 | TRD OT-03 | Filesystem versus database cache backend | Open — affects `storage/cache/` |
 | — | Production host, domain and provisioning date | Not yet decided |
+| ~~cPanel PHP handler block in `public/.htaccess`~~ | **Closed 2026-10-11** — the live host writes none; the version in this repository is authoritative (§3.1) |
 | — | Cloudflare proxying and data residency (L-2, X-01) | **PENDING COUNSEL** — the proxy is live on the development host; the residency question belongs to the owner and counsel, not to this document |
-| — | cPanel PHP handler block in `public/.htaccess` | **Open — capture the generated block and commit it; until then the deployed copy is `--skip-worktree` (§3.1)** |
 
 ---
 

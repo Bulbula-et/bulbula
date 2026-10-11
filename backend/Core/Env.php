@@ -15,11 +15,31 @@ use Dotenv\Dotenv;
  */
 final class Env
 {
+    private static bool $fileFound = false;
+
+    /**
+     * Read `.env` if it is there.
+     *
+     * `safeLoad()` is deliberate: a project with no `.env` is a legitimate
+     * state (the test suite, a host configured entirely by environment
+     * variables), and every value has a safe default. But "no file" must not be
+     * *invisible* — see `fileFound()`. `.env.example` is never read as
+     * configuration: the example is a document, and treating it as settings
+     * would mean shipping a host the file it was told to copy from.
+     */
     public static function load(string $basePath): void
     {
-        if (is_file($basePath . '/.env')) {
+        self::$fileFound = is_file($basePath . '/.env');
+
+        if (self::$fileFound) {
             Dotenv::createImmutable($basePath)->safeLoad();
         }
+    }
+
+    /** Whether `.env` was present where the application looked for it. */
+    public static function fileFound(): bool
+    {
+        return self::$fileFound;
     }
 
     public static function get(string $key, ?string $default = null): ?string

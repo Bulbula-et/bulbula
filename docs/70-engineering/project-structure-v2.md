@@ -627,6 +627,21 @@ It now counts what it installed.
 
 This pass left the suite at 214 tests and 5,612 assertions.
 
+**Addendum, same session — what the live host confirmed, and the last gap it
+left.** The owner's session on the development host settled three things and
+exposed one more: the document root is `public/` and the console now reports
+failures; PHP 8.4 is selected per domain in MultiPHP Manager and cPanel writes
+**no handler block** into `public/.htaccess` (so `deployment.md` §3.1's warning is
+settled, and the interim `--skip-worktree` withdrawal is recorded there); and the
+eight shipped migrations applied. The remaining gap was the reverse of the
+silence already fixed: `.env` is optional by design and `safeLoad()` reads it
+only when it exists — correct, but a host with **no** `.env` then ran on defaults
+without saying so, which is how an edit to `.env.example` (a document, never
+read) can look like a configuration change that does nothing. `Env` now records
+whether it found the file, `Application::boot()` warns in the log, and
+`bin/console` says it on the terminal where an operator is standing — with a test
+that pins the rule that the example is never read as settings.
+
 ---
 
 *Companion records: `php-application-structure-v1.0.md` (superseded; its feature

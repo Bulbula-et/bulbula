@@ -380,6 +380,16 @@ final class Application
 
         $this->booted = true;
 
+        if (!Env::fileFound()) {
+            // Defaults are safe, but a host with no .env is almost always a
+            // host somebody configured by mistake — the classic being an edit
+            // to `.env.example`, which is a document and never read.
+            $this->logger->warning(
+                'No .env file was found; the application is running on environment variables '
+                . 'and defaults only. Copy .env.example to .env and fill it in.',
+            );
+        }
+
         $this->logger->debug('Application booted.', ['env' => $config->string('app.env', 'local')]);
     }
 
