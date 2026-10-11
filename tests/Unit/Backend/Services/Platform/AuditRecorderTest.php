@@ -68,6 +68,27 @@ final class AuditRecorderTest extends TestCase
     }
 
     #[Test]
+    public function it_records_a_platform_action_without_naming_a_person(): void
+    {
+        // An owner decision (2026-10-11): when the platform acts by itself —
+        // a scheduled job, a retention sweep — the entry says so. Naming the
+        // Administrator would blame a person for something a machine did.
+        $entry = $this->recorder()->record(ActorType::System, null, 'listing.expired', 'listing', 12, 'Nightly sweep');
+
+        self::assertNull($entry->actorId);
+        self::assertSame('system', $this->row()['actor_type']);
+    }
+
+    #[Test]
+    public function the_platform_cannot_be_given_a_person_s_id(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('cannot name an actor id');
+
+        $this->recorder()->record(ActorType::System, 7, 'listing.expired');
+    }
+
+    #[Test]
     public function an_authenticated_actor_without_an_id_is_refused(): void
     {
         // "Who acted" is the point of the trail: an anonymous operator entry

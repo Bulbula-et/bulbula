@@ -378,7 +378,7 @@ is product-specific, which is exactly why they came first — M1 items 2, 11 and
 | Migration machinery: `Migration`, `MigrationLocator`, `MigrationRepository`, `Migrator` | `backend/Database/Migrations/` | TR-173, TR-175, TR-181; architecture §10 |
 | `migrate`, `migration:status`, `rollback [--steps=n]`, wired through the composition root | `backend/Console/`, `routes/console.php`, `bin/console` | architecture §10, TD-06 |
 | The audit trail: its table, an append-only repository, and a recorder that fails the action it could not record | `database/migrations/2026_10_11_120000_create_audit_entries.php`, `backend/Domain/Platform/`, `backend/Repositories/Platform/`, `backend/Services/Platform/` | C-29, TR-08, TR-167, OM-6.1–6.3 |
-| `ActorType` — Guest, Customer, Operator, Administrator | `backend/Domain/Platform/ActorType.php` | OM §3, TR-40, D-54 |
+| `ActorType` — Guest, Customer, Operator, Administrator, and `System` (owner decision, 2026-10-11) | `backend/Domain/Platform/ActorType.php` | OM §3, TR-40, D-54 |
 
 `Platform` was checked against §4.1 before the first file was written: audit,
 analytics, notifications, jobs and cache are its declared territory, so the
@@ -388,18 +388,22 @@ New assertions arrive with the code they guard, as §2.2 requires: the audit
 trail is append-only (`UPDATE` or `DELETE` against `audit_entries` fails the
 build, while the migration that owns the table is exempt), DDL is confined to
 `backend/Database`, `backend/Repositories` and `database/migrations`, and
-`database/migrations/` is scanned as source. The suite stands at 90 tests and
-2,458 assertions; Pint, PHPStan at level max and PHPUnit are green together.
+`database/migrations/` is scanned as source. The suite stands at 96 tests and
+2,474 assertions; Pint, PHPStan at level max and PHPUnit are green together.
 
-Two things the slice refused to decide, because the specification does not:
+One thing the slice refused to decide, and one the owner then decided:
 
-- **Attribution for platform-initiated actions.** OM §3 names four actors, and
-  a scheduled job is none of them — while the same document's prose says "there
-  is no fourth" over a table that lists four plus a Business owner marked *not
-  a platform actor* (D-54). The contradiction is real and is reported rather
-  than smoothed over: whether a job records as a system actor, as the
-  Administrator who scheduled it, or not at all is an owner question, so no
-  fifth `ActorType` case was invented.
+- **Attribution for platform-initiated actions — decided by the owner,
+  2026-10-11: a `System` actor.** OM §3's prose says "exactly three platform
+  actors. There is no fourth." over a table that lists four plus a Business
+  owner marked *not a platform actor* (D-54); a scheduled job is none of them
+  either. Faced with recording a machine's action as a named Administrator,
+  recording it as nothing, or recording it as the machine it was, the owner
+  chose the third. `ActorType::System` is therefore an owner decision, not an
+  invention: it is never authenticated, never carries an actor id, and the
+  check that enforces that is in `AuditRecorder`. The prose contradiction in
+  OM §3 is **not** corrected here — it is a requirements document, and it now
+  carries a status note instead of a silent edit.
 - **The retention period for audit entries**, which is `PENDING COUNSEL`
   (L-21, D-46) and therefore never invented in code.
 

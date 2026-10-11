@@ -116,6 +116,18 @@ have no account through which to object.
 
 ## 3. Actors
 
+> **Status note (2026-10-11).** The prose below ("exactly three platform
+> actors. There is no fourth.") has never matched this section's own table,
+> which lists four actors plus a Business owner marked *not a platform actor*
+> (D-54). The build records five actor types, adding **`System`** for actions
+> the platform takes by itself — a scheduled job or a retention sweep — on the
+> owner's decision of 2026-10-11: recording such an action as a named
+> Administrator would blame a person for what a machine did, and recording
+> nothing would leave a change to live data unaudited. `System` is not an
+> account and never carries an actor id. This note records the decision; the
+> prose and the table are left as written, because correcting a requirements
+> document is the owner's edit, not the build's.
+
 V1 has exactly three platform actors. There is no fourth.
 
 | Actor | Authentication | Role in operations |
