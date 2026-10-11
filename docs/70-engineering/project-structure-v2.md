@@ -569,6 +569,17 @@ place a deployment's own address is written down (`APP_URL`), which makes a
 domain move an `.env` change rather than a code change, and the web test pins
 `APP_URL` and asserts the absolute value in the page (GA-1, TR-04).
 
+**Second follow-up within the pass (2026-10-11, CI caught it):** the local file
+mail spool named its files with second precision plus a random suffix, so two
+codes issued inside one second shared a timestamp to the second and "the newest
+message" became a coin toss between them — measured with the real reader
+comparator at 101/200. The name now carries microseconds, which makes
+lexicographic order chronological (measured 200/200), and the API link-journey
+test snapshots what was delivered before the Google call so it reads the link
+code by identity rather than by luck. This was a harness/dev-transport defect,
+not a product defect: the 422 CI reported was the correct refusal of an
+already-consumed code.
+
 **Defect found and fixed while testing this pass:** the hand-rolled JWK → PEM
 conversion was wrong twice — the `AlgorithmIdentifier` was double-wrapped in a
 SEQUENCE, and the RSA key was appended to the SubjectPublicKeyInfo body instead
