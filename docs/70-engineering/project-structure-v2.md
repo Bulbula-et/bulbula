@@ -559,6 +559,16 @@ to set, so they are cited by URL in the integration rather than paraphrased.
   — the same reasoning as §11.5's `UndeliverableOtpSender`: a half-configured
   environment behaves as if the feature were not there, and says so in the log.
 
+**Follow-up within the pass (2026-10-11, after the first deployment was named):**
+the button's `data-login_uri` was built from a request-relative path. Google
+compares that string with the client's authorised redirect URIs character for
+character and the console accepts absolute URIs only, so a relative value would
+have produced `redirect_uri_mismatch` as soon as the app ran anywhere but the
+root of a domain. It is now `config('app.url') . '/sign-in/google'` — the one
+place a deployment's own address is written down (`APP_URL`), which makes a
+domain move an `.env` change rather than a code change, and the web test pins
+`APP_URL` and asserts the absolute value in the page (GA-1, TR-04).
+
 **Defect found and fixed while testing this pass:** the hand-rolled JWK → PEM
 conversion was wrong twice — the `AlgorithmIdentifier` was double-wrapped in a
 SEQUENCE, and the RSA key was appended to the SubjectPublicKeyInfo body instead

@@ -22,6 +22,9 @@ final class GoogleSignInTest extends ApplicationTestCase
 {
     private const CLIENT = 'bulbula-web.apps.googleusercontent.com';
 
+    /** The address this deployment believes it lives at (GA-1, TR-04). */
+    private const APP_URL = 'https://bulbula.example.test';
+
     private string $directory = '';
 
     private string $privateKey = '';
@@ -67,6 +70,7 @@ final class GoogleSignInTest extends ApplicationTestCase
             'MAIL_TRANSPORT'      => 'local',
             'MAIL_LOCAL_PATH'     => $this->directory . '/mail',
             'OTP_RESEND_COOLDOWN' => '0',
+            'APP_URL'             => self::APP_URL,
             'GOOGLE_CLIENT_IDS'   => self::CLIENT,
             'GOOGLE_JWKS_URL'     => 'file://' . $this->directory . '/jwks.json',
             'GOOGLE_KEYS_CACHE'   => $this->directory . '/keys.json',
@@ -81,7 +85,12 @@ final class GoogleSignInTest extends ApplicationTestCase
         self::assertSame(200, $response->status());
         self::assertStringContainsString('g_id_signin', $response->body());
         self::assertStringContainsString(self::CLIENT, $response->body());
-        self::assertStringContainsString('/sign-in/google', $response->body());
+        // Google compares this string with the client's authorised redirect
+        // URIs character for character, so it must be absolute (GA-1).
+        self::assertStringContainsString(
+            'data-login_uri="' . self::APP_URL . '/sign-in/google"',
+            $response->body(),
+        );
     }
 
     #[Test]

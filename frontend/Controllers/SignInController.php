@@ -118,6 +118,20 @@ final class SignInController
         }
     }
 
+    /**
+     * The absolute address Google must post the credential back to (GA-1).
+     *
+     * Google requires this value to match one of the client's authorised
+     * redirect URIs character for character, and the console only accepts
+     * absolute URIs — so this follows `APP_URL`, which is the one place the
+     * deployment's own address is written down. Moving the site to another
+     * domain is therefore an `.env` change, not a code change.
+     */
+    private function googleLoginUri(): string
+    {
+        return $this->config->string('app.url') . '/sign-in/google';
+    }
+
     /** The first configured Google client id, or an empty string when Google is off. */
     private function googleClientId(): string
     {
@@ -297,6 +311,7 @@ final class SignInController
                 'stage'     => $stage,
                 'email'     => $email ?? $request->trimmed('email'),
                 'googleClientId' => $this->googleClientId(),
+                'googleLoginUri' => $this->googleLoginUri(),
             ]),
         ], $status);
 

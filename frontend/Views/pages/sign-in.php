@@ -15,6 +15,7 @@ declare(strict_types=1);
  * @var string      $stage       `request` or `verify`
  * @var string      $email       what the person typed, so they do not retype it
  * @var string|null $googleClientId  the configured client id, or empty when Google is off
+ * @var string|null $googleLoginUri  the absolute address Google posts the credential back to
  */
 ?>
 <section class="wrap section sign-in">
@@ -102,7 +103,7 @@ declare(strict_types=1);
             data-shape="rectangular"
             data-logo_alignment="left"
             data-ux_mode="redirect"
-            data-login_uri="<?= e(url('/sign-in/google')) ?>"
+            data-login_uri="<?= e($googleLoginUri ?? url('/sign-in/google')) ?>"
             data-client_id="<?= e($googleClientId) ?>"
         ></div>
 
