@@ -213,6 +213,7 @@ On the development host:
 | Maps | **API key** (D-21) | **Yes** |
 | Telegram | **bot token** (D-33) | **Yes** |
 | Tunables | cache lifetimes, rate limits, page sizes, session lifetimes | No |
+| Proxy | **trusted networks** whose forwarded client address is believed (`TRUSTED_PROXIES`) | No |
 
 ### 5.3 Secrets
 
@@ -225,6 +226,34 @@ On the development host:
 | SC-5 | A secret committed by accident is **rotated**, not merely removed from history |
 | SC-6 | Rotation requires no code change — every secret is a variable (CF-1) |
 | SC-7 | **Production secret custody is Open (D-23).** This document states the mechanism; it does not assign custody |
+
+---
+
+### 5.4 The proxy in front, and whose address a request is
+
+The deployment model includes a proxy in front of the application
+(`project-understanding-v0.1.md`; the development host runs Cloudflare). Then
+`REMOTE_ADDR` is the **proxy**, not the visitor, and two requirements quietly
+stop holding: OTP-6/AX-1 limit requests *per source network*, and the audit
+record names an actor's address.
+
+`TRUSTED_PROXIES` lists the networks whose forwarded address may be believed —
+Cloudflare's published ranges, and nothing else. The rule the code applies
+(`Backend\Core\ClientAddress`) is deliberately conservative:
+
+| ID | Rule |
+| --- | --- |
+| PX-1 | A forwarded address is believed **only** when the connecting peer is inside `TRUSTED_PROXIES`. Anyone can send the header; only the proxy can be the sender |
+| PX-2 | The chain is read **right to left**, and the first entry that is not itself a trusted proxy is the client — so a client-supplied value sitting to the left of the address the proxy appended is ignored |
+| PX-3 | Entries that are not addresses are dropped, never guessed at |
+| PX-4 | With `TRUSTED_PROXIES` empty the connecting address is the client address. That is the default, and the correct setting when the origin is reachable directly |
+| PX-5 | Trust is granted by **network**, never by "the header is present": a deployment that cannot say what its proxy's addresses are leaves this empty |
+| PX-6 | **Edge caching must never cover a response that carries a session.** No "Cache Everything" rule, and no cache rule on `/sign-in*`, `/api/*` or any authenticated path. Cloudflare's defaults cache static assets only, which is what this application wants |
+
+The origin should not be reachable except through the proxy (a firewall rule, or
+the host's own). If it is reachable directly, a request that skips the proxy is
+still answered with its own address — but one visitor then counts twice: once
+direct, once through the edge.
 
 ---
 
@@ -558,6 +587,7 @@ broken part — this is the split working as designed.
 | L-21 | Retention of backups and logs | **PENDING COUNSEL** |
 | TRD OT-03 | Filesystem versus database cache backend | Open — affects `storage/cache/` |
 | — | Production host, domain and provisioning date | Not yet decided |
+| — | Cloudflare proxying and data residency (L-2, X-01) | **PENDING COUNSEL** — the proxy is live on the development host; the residency question belongs to the owner and counsel, not to this document |
 | — | cPanel PHP handler block in `public/.htaccess` | **Open — capture the generated block and commit it; until then the deployed copy is `--skip-worktree` (§3.1)** |
 
 ---

@@ -31,7 +31,12 @@ final class Request
     ) {
     }
 
-    public static function fromGlobals(): self
+    /**
+     * @param list<string> $trustedProxies networks whose forwarded client address is believed
+     *                                     (ClientAddress). Empty — the default — means the peer
+     *                                     address is the client address.
+     */
+    public static function fromGlobals(array $trustedProxies = []): self
     {
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
         $uri = is_string($uri) ? $uri : '/';
@@ -45,7 +50,7 @@ final class Request
             query: self::stringKeyed($_GET),
             body: self::readBody(),
             headers: self::readHeaders(),
-            clientIp: self::nullableString($_SERVER['REMOTE_ADDR'] ?? null),
+            clientIp: ClientAddress::resolve($_SERVER, $trustedProxies),
             cookies: self::readCookies(),
         );
     }
@@ -122,11 +127,6 @@ final class Request
     private static function scalarString(mixed $value, string $default): string
     {
         return is_scalar($value) ? (string) $value : $default;
-    }
-
-    private static function nullableString(mixed $value): ?string
-    {
-        return is_scalar($value) ? (string) $value : null;
     }
 
     public function header(string $name, ?string $default = null): ?string

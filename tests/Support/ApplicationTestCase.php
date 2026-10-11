@@ -23,12 +23,24 @@ abstract class ApplicationTestCase extends TestCase
 {
     private ?Application $application = null;
 
+    /**
+     * How many error handlers this test caused to be installed.
+     *
+     * `Application::boot()` installs one, and a test may boot more than one
+     * composition root (`newApplication()`). PHPUnit must get its own stack back
+     * exactly: restoring one that was never installed removes PHPUnit's own
+     * handler — which it reports as a risky test — and restoring too few leaves
+     * the application's handler on the stack for the next test.
+     */
+    private int $installedHandlers = 0;
+
     protected function tearDown(): void
     {
-        // Application::boot() installs an error handler; PHPUnit must get its
-        // own back or the next test inherits ours.
-        restore_error_handler();
+        for ($index = 0; $index < $this->installedHandlers; $index++) {
+            restore_error_handler();
+        }
 
+        $this->installedHandlers = 0;
         $this->application = null;
 
         parent::tearDown();
@@ -60,6 +72,7 @@ abstract class ApplicationTestCase extends TestCase
     {
         $application = new Application($basePath ?? dirname(__DIR__, 2));
         $application->boot();
+        $this->installedHandlers++;
 
         return $application;
     }
@@ -191,9 +204,10 @@ abstract class ApplicationTestCase extends TestCase
         // what the environment values exist to change.
         return $this->withEnvironment(
             $this->bootEnvironment(),
-            static function (): Application {
+            function (): Application {
                 $application = new Application(dirname(__DIR__, 2));
                 $application->boot();
+                $this->installedHandlers++;
 
                 return $application;
             },

@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Bulbula\Tests\Feature\Console;
 
+use Bulbula\Backend\Console\Command;
+use Bulbula\Backend\Console\CommandRunner;
 use Bulbula\Backend\Console\Output;
 use Bulbula\Backend\Core\Application;
 use Bulbula\Tests\Support\ApplicationTestCase;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 
 /**
  * `bin/console`, through the real composition root: the command table, the
@@ -158,6 +161,54 @@ final class ConsoleCommandsTest extends ApplicationTestCase
         return $this->booted()
             ->console($output)
             ->run(['bin/console', ...$arguments]);
+    }
+
+    #[Test]
+    public function a_command_that_fails_says_so_and_returns_non_zero(): void
+    {
+        // A console that prints nothing is indistinguishable from a console that
+        // succeeded: an operator concludes "there was nothing to do" while the
+        // schema they believe in does not exist. The runner must speak.
+        $output = new class () implements Output {
+            public string $stdout = '';
+
+            public string $stderr = '';
+
+            public function line(string $text = ''): void
+            {
+                $this->stdout .= $text . "\n";
+            }
+
+            public function error(string $text): void
+            {
+                $this->stderr .= $text . "\n";
+            }
+        };
+
+        $runner = new CommandRunner([
+            'explode' => static fn (): Command => new class () implements Command {
+                public function name(): string
+                {
+                    return 'explode';
+                }
+
+                public function description(): string
+                {
+                    return 'Always fails.';
+                }
+
+                /** @param list<string> $arguments */
+                public function run(array $arguments): int
+                {
+                    throw new RuntimeException('SQLSTATE[HY000] [2002] Connection refused');
+                }
+            },
+        ], $output);
+
+        self::assertSame(1, $runner->run(['bin/console', 'explode']));
+        self::assertStringContainsString('SQLSTATE[HY000] [2002] Connection refused', $output->stderr);
+        self::assertStringContainsString('explode', $output->stderr);
+        self::assertSame('', $output->stdout);
     }
 
     private function capture(): Output

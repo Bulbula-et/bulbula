@@ -18,6 +18,20 @@ return [
         'secure'   => Env::get('APP_ENV', 'production') !== 'local',
     ],
 
+    /*
+     * Networks whose forwarded client address may be believed (ClientAddress).
+     *
+     * Empty means none: the peer address is the client address, which is correct
+     * when nothing sits in front of the application. A proxy in front — the
+     * deployment model this project assumes, and what the development host runs
+     * — makes every visitor share one peer address, and the per-network limits
+     * (OTP-6, AX-1) and the audit record would then describe the proxy instead of
+     * the visitor. Behind Cloudflare, list Cloudflare's own ranges
+     * (https://www.cloudflare.com/ips-v4 and /ips-v6); nothing else should be
+     * listed, and the origin should not be reachable except through it.
+     */
+    'trusted_proxies' => Env::get('TRUSTED_PROXIES', ''),
+
     'csrf' => [
         'enabled' => Env::bool('CSRF_ENABLED', true),
         'cookie'  => Env::get('CSRF_COOKIE', 'bulbula_csrf'),

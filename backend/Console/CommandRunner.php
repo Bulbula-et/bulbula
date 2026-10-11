@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Bulbula\Backend\Console;
 
 use Closure;
+use Throwable;
 
 /**
  * Turns `argv` into one command run.
@@ -45,7 +46,24 @@ final class CommandRunner
             return 1;
         }
 
-        return ($this->factories[$name])()->run(array_values(array_slice($argv, 2)));
+        try {
+            return ($this->factories[$name])()->run(array_values(array_slice($argv, 2)));
+        } catch (Throwable $error) {
+            // A command that fails must say so on the terminal. Production sets
+            // display_errors off, so an exception reaching the top of the script
+            // prints nothing on some hosts — and a console that prints nothing
+            // is indistinguishable from a console that succeeded, which is how
+            // an operator concludes "there was nothing to do" while the schema
+            // they believe in does not exist.
+            $this->output->error(sprintf(
+                'Command [%s] failed: %s: %s',
+                $name,
+                $error::class,
+                $error->getMessage(),
+            ));
+
+            return 1;
+        }
     }
 
     private function list(): void

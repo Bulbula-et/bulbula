@@ -23,8 +23,24 @@ if (!is_file($autoload)) {
 
 require $autoload;
 
-$application = new Application(BASE_PATH);
-$application->boot();
+try {
+    $application = new Application(BASE_PATH);
+    $application->boot();
+
+    $status = $application->console()->run($argv);
+} catch (Throwable $error) {
+    // Boot failures happen before the runner exists — an unreadable .env, an
+    // unwritable log directory, a missing extension. They must still be visible
+    // on the terminal, whatever the web-facing error settings say.
+    fwrite(STDERR, sprintf(
+        'Bulbula could not start: %s: %s%s',
+        $error::class,
+        $error->getMessage(),
+        PHP_EOL,
+    ));
+
+    exit(1);
+}
 
 // The only exit() in the project: every command returns a code instead.
-exit($application->console()->run($argv));
+exit($status);

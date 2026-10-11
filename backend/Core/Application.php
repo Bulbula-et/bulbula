@@ -383,11 +383,34 @@ final class Application
         $this->logger->debug('Application booted.', ['env' => $config->string('app.env', 'local')]);
     }
 
+    /**
+     * The networks whose forwarded client address may be believed.
+     *
+     * Empty by default, because trusting a forwarded header is safe only for a
+     * peer that can be identified as the proxy itself (ClientAddress).
+     *
+     * @return list<string>
+     */
+    private function trustedProxies(): array
+    {
+        $networks = [];
+
+        foreach (explode(',', $this->config()->string('security.trusted_proxies')) as $candidate) {
+            $candidate = trim($candidate);
+
+            if ($candidate !== '') {
+                $networks[] = $candidate;
+            }
+        }
+
+        return $networks;
+    }
+
     public function run(): void
     {
         $this->boot();
 
-        $this->kernel()->handle(Request::fromGlobals())->send();
+        $this->kernel()->handle(Request::fromGlobals($this->trustedProxies()))->send();
     }
 
     private function registerErrorHandling(bool $debug): void
