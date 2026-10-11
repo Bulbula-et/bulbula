@@ -597,6 +597,36 @@ signal only (TR-32, AI-4, D-48).
 
 This pass left the suite at 183 tests and 5,493 assertions.
 
+### 11.7 Seventh pass — what only a real host could show (2026-10-11)
+
+The first session on the development host produced two defects that no local run
+had exposed, both fixed in `9b81d25`. Sources of truth are the deployment model
+in `project-understanding-v0.1.md` (*"Cloudflare in front"*), `deployment.md`
+§5.4 (new) and the identity rules the rate limits come from (OTP-6, AX-1).
+
+| Built | Where | Why it exists |
+| --- | --- | --- |
+| `CommandRunner` reports a throwing command and returns 1 | `backend/Console/` | `display_errors` is switched off outside development — right for a response, wrong for a terminal. A console that prints nothing is indistinguishable from one that succeeded |
+| `bin/console` reports a **boot** failure | `bin/` | Boot happens before any command exists; an unreadable `.env` or an unwritable log directory must still be visible |
+| `ClientAddress` (trusted-proxy resolution) | `backend/Core/` | With Cloudflare in front the peer is the edge: every visitor shared one address, so the per-network limits (OTP-6, AX-1) covered everybody at once and the audit record would have named the proxy |
+| `TRUSTED_PROXIES` | `config/security.php`, `.env.example` | Trust is a deployment fact, so it is configuration. Empty — the default — believes nobody |
+| §5.4, rules PX-1…PX-6 | `deployment.md` | States the trust rule, and that edge caching must never cover a response carrying a session |
+
+**The decision this pass had to make:** whether to trust a forwarded address at
+all. The answer is no, not by default — a header is a claim, not a fact, and only
+the *sender's* address can make it worth reading. Honouring `X-Forwarded-For`
+unconditionally would have been the convenient reading of "Cloudflare is in
+front", and it is exactly the reading that turns a rate limit into a suggestion.
+The same reasoning decides the walk direction: right to left, because a proxy
+appends what it saw and anything to the left may have been typed by the client.
+
+**Also recorded here:** `ApplicationTestCase` restored an error handler for every
+test, including tests that never booted the application — restoring one that was
+never installed removes PHPUnit's own handler, which is reported as a risky test.
+It now counts what it installed.
+
+This pass left the suite at 214 tests and 5,612 assertions.
+
 ---
 
 *Companion records: `php-application-structure-v1.0.md` (superseded; its feature
