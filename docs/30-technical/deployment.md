@@ -147,8 +147,16 @@ asked for — which is what the router matches on.
 > handler`) is written into `public/.htaccess` by MultiPHP Manager and is
 > **not** in version control unless committed. A deploy that resets the
 > working tree deletes it, and every PHP URL then 500s under an older
-> interpreter. The block therefore lives in `public/.htaccess` **in this
-> repository**, and that is the copy to change when the PHP version changes.
+> interpreter — on this host the default shell interpreter is 8.2 (§2).
+>
+> **Status 2026-10-11: the block is not yet in this repository.** The
+> intention is unchanged — the block belongs here, and this is the copy to
+> change when the PHP version changes. Until it is captured and committed, the
+> deployed copy is protected with `git update-index --skip-worktree
+> public/.htaccess`: a `reset --hard` honours that bit (verified 2026-10-11),
+> so the host-generated block survives the ten-minute refresh of §7.1. That is
+> a local measure on one host, not a substitute for committing the block; it is
+> listed in §18.
 
 ---
 
@@ -180,7 +188,7 @@ On the development host:
 ### 5.1 How it works
 
 ```text
-.env  →  Bulbula\Config\Env  →  Bulbula\Config\Config  →  config/*.php  →  application
+.env  →  Bulbula\Backend\Core\Env  →  Bulbula\Backend\Core\Config  →  config/*.php  →  application
 ```
 
 | ID | Rule | Enforced by |
@@ -290,6 +298,10 @@ cd /home/arkeonet/public_html/bulbula.arkeonethiopia.com \
        --no-dev --prefer-dist --no-interaction --optimize-autoloader \
   >> /home/arkeonet/bulbula-deploy.log 2>&1
 ```
+
+The repository root is exactly the directory in that command — **one copy
+only**. A second `git clone` *inside* it creates `bulbula/`: an unmanaged
+duplicate that is never served, never updated and holds a stale tree. Remove it.
 
 `git reset --hard` **discards anything edited directly on the server**,
 including files hand-created in the working tree that are now tracked (an
@@ -546,6 +558,7 @@ broken part — this is the split working as designed.
 | L-21 | Retention of backups and logs | **PENDING COUNSEL** |
 | TRD OT-03 | Filesystem versus database cache backend | Open — affects `storage/cache/` |
 | — | Production host, domain and provisioning date | Not yet decided |
+| — | cPanel PHP handler block in `public/.htaccess` | **Open — capture the generated block and commit it; until then the deployed copy is `--skip-worktree` (§3.1)** |
 
 ---
 
