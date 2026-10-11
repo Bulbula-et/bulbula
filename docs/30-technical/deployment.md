@@ -108,25 +108,43 @@ bulbula.et/                      <- repository root, NOT web accessible
 
 ### 3.1 `public/.htaccess`
 
-Part of the repository (DP-1):
+Part of the repository (DP-1). The file is authoritative; this is a summary of it:
 
 ```apache
-DirectoryIndex index.php
-
+# Everything that is not an existing file is handled by the front controller.
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Redirect direct requests for index.php to the clean path.
+    RewriteCond %{THE_REQUEST} \s/+index\.php[\s?] [NC]
+    RewriteRule ^ / [R=301,L]
+
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^ index.php [QSA,L]
+    RewriteRule ^ index.php [L]
 </IfModule>
+
+# Never serve a dotfile, a backup or a template as-is.
+<FilesMatch "(^\.|\.(env|log|sql|bak|old|orig|sh|md|json|lock|ini|dist)$)">
+    Require all denied
+</FilesMatch>
 ```
+
+followed by the security headers, compression and expiry blocks, and
+`Options -Indexes -MultiViews`.
 
 | Request | Result |
 | --- | --- |
 | `/` | `index.php` — the directory index *is* the front controller |
-| `/health`, `/api/v1/health` | `index.php` with the original URI preserved |
+| `/health`, `/api/v1/health` | `index.php`, because the path is not a file, and `REQUEST_URI` is preserved |
+| `/index.php` | `301` to `/` — which is also the proof that the rewrite is being applied (§11) |
 | `/assets/css/styles.css` | Served by Apache, never routed |
+
+**This file depends on the host honouring `.htaccess`.** A docroot whose
+`AllowOverride` excludes `FileInfo` (the class that permits both `RewriteRule`
+and the header directives) makes every block above silently do nothing: the
+directory index still answers `/`, and **every other path returns the host's own
+404 page** because no rewrite ever runs. §16 has the diagnosis ladder.
 
 The rewrite is **internal**, so `REQUEST_URI` keeps the path the client
 asked for — which is what the router matches on.
@@ -433,7 +451,12 @@ curl -s   https://<host>/health/ready                              # {"status":"
 curl -s   https://<host>/api/v1/health/ready                       # the same answer, for a machine
 curl -so /dev/null -w '%{http_code}\n' https://<host>/missing                      # 404
 curl -so /dev/null -w '%{http_code}\n' https://<host>/assets/css/app.css           # 200
+curl -so /dev/null -w '%{http_code}\n' https://<host>/index.php                    # 301 — the rewrite is applied
 ```
+
+The last line is the one that tells a misconfigured docroot from a working one:
+`301` means `.htaccess` is honoured and `/health` is answered by the application;
+`200` or `404` means the rewrite never ran (§16, third entry).
 
 | ID | Rule |
 | --- | --- |
@@ -533,6 +556,85 @@ The request reached an interpreter older than PHP 8.4, which cannot parse
 this codebase. The cPanel MultiPHP handler block was lost when the deploy
 reset the working tree. See §3.1 — the block belongs in the committed
 `public/.htaccess`.
+
+### `/` answers but every other path shows the hosting provider's own 404 page
+
+The application is running — `/` is the directory index — but nothing else
+reaches it, so the paths that exist (`/health`, `/sign-in`) are indistinguishable
+from paths that do not. The rewrite is not being applied. In order of likelihood:
+
+1. **`.htaccess` is not read at all.** `AllowOverride None` (or an equivalent
+   LiteSpeed setting) for that document root: Apache ignores the whole file, so
+   the rewrite, the dotfile deny and the security headers are all inert. Prove it
+   without leaving anything behind — the deny rule is the test:
+
+   ```bash
+   printf 'x\n' > public/zzz-deny-test.md
+   curl -so /dev/null -w '%{http_code}\n' -H 'Host:<domain>' http://127.0.0.1/zzz-deny-test.md
+   rm public/zzz-deny-test.md
+   ```
+
+   `403` means the file **is** read (the `.md` deny matched) → go to 2. `200`
+   means the file is not read at all → the host must enable overrides
+   (`AllowOverride FileInfo Options AuthConfig`, or `All`) for the document root.
+   Nothing in the application can work around this; it is a one-line support
+   request.
+2. **`.htaccess` is read but `mod_rewrite` is unavailable**, so the
+   `<IfModule mod_rewrite.c>` guard skips the whole block. Same evidence as
+   (1) `403`, plus a `/index.php` request that returns `404` **with this
+   application's own page** (which also proves PHP is running) instead of the
+   `301` of §11. Ask the host to confirm `mod_rewrite` is loaded for the domain.
+3. **The document root is not the one you think.** `/` still answers 200 from
+   wherever the vhost really points, and the three symptoms look identical. Confirm
+   by the presence of `X-Request-Id` on the response: only this application's
+   kernel adds it.
+
+```bash
+curl -sI -H 'Host:<domain>' http://127.0.0.1/ | grep -Ei 'HTTP/|server:|x-request-id|x-frame-options'
+```
+
+`X-Request-Id` present → this application answered. `X-Frame-Options: DENY`
+present → `.htaccess` was read (it is set there, not by PHP). Both absent → the
+request never reached this application at all.
+
+### `/` answers but every other path shows the hosting provider's own 404 page
+
+The application is running — `/` is the directory index — but nothing else
+reaches it, so the paths that exist (`/health`, `/sign-in`) are indistinguishable
+from paths that do not. The rewrite is not being applied. In order of likelihood:
+
+1. **`.htaccess` is not read at all.** `AllowOverride None` (or an equivalent
+   LiteSpeed setting) for that document root: Apache ignores the whole file, so
+   the rewrite, the dotfile deny and the security headers are all inert. Prove it
+   without leaving anything behind — the deny rule is the test:
+
+   ```bash
+   printf 'x\n' > public/zzz-deny-test.md
+   curl -so /dev/null -w '%{http_code}\n' -H 'Host:<domain>' http://127.0.0.1/zzz-deny-test.md
+   rm public/zzz-deny-test.md
+   ```
+
+   `403` means the file **is** read (the `.md` deny matched) → go to 2. `200`
+   means the file is not read at all → the host must enable overrides
+   (`AllowOverride FileInfo Options AuthConfig`, or `All`) for the document root.
+   Nothing in the application can work around this; it is a one-line support
+   request.
+2. **`.htaccess` is read but `mod_rewrite` is unavailable**, so the
+   `<IfModule mod_rewrite.c>` guard skips the whole block. Same evidence as
+   (1) `403`, plus a `301` test on `/index.php` that returns `200`/`404`. Ask the
+   host to confirm `mod_rewrite` is loaded for the domain.
+3. **The document root is not the one you think.** `/` still answers 200 from
+   wherever the vhost really points, and the three symptoms look identical. Confirm
+   by the presence of `X-Request-Id` on the response: only this application's
+   kernel adds it.
+
+```bash
+curl -sI -H 'Host:<domain>' http://127.0.0.1/ | grep -Ei 'HTTP/|server:|x-request-id|x-frame-options'
+```
+
+`X-Request-Id` present → this application answered. `X-Frame-Options: DENY`
+present → `.htaccess` was read (it is set there, not by PHP). Both absent → the
+request never reached this application at all.
 
 ### The home page 500s but `/health` works
 
