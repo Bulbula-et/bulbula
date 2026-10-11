@@ -7,6 +7,7 @@ namespace Bulbula\Tests\Unit\Backend\Services\Identity;
 use Bulbula\Backend\Domain\Identity\PrincipalType;
 use Bulbula\Backend\Domain\Identity\Surface;
 use Bulbula\Backend\Repositories\Identity\SessionRepository;
+use Bulbula\Backend\Security\Csrf;
 use Bulbula\Backend\Services\Identity\SessionService;
 use Bulbula\Tests\Support\DatabaseTestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -158,7 +159,12 @@ final class SessionServiceTest extends DatabaseTestCase
 
     private function sessions(): SessionService
     {
-        return new SessionService(new SessionRepository($this->database()), $this->config(), $this->clock);
+        return new SessionService(
+            new SessionRepository($this->database()),
+            $this->config(),
+            $this->clock,
+            new Csrf($this->config()),
+        );
     }
 
     private function storedTokenHash(): string

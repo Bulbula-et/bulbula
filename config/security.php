@@ -20,6 +20,7 @@ return [
 
     'csrf' => [
         'enabled' => Env::bool('CSRF_ENABLED', true),
+        'cookie'  => Env::get('CSRF_COOKIE', 'bulbula_csrf'),
     ],
 
     /*

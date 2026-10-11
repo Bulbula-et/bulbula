@@ -27,6 +27,7 @@ final readonly class Session
         public DateTimeImmutable $lastActiveAt,
         public DateTimeImmutable $expiresAt,
         public ?DateTimeImmutable $revokedAt,
+        public ?string $csrfHash = null,
     ) {
     }
 

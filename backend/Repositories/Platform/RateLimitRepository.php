@@ -31,12 +31,19 @@ final class RateLimitRepository
     }
 
     /**
-     * Count one hit and return the running total for the current window.
+     * Count one hit and report the running total for the current window.
      *
      * The window starts on the first hit, so a limit is "per source per
      * window", not a fixed clock the caller has to reason about.
+     *
+     * `retry_after` is how long the caller would have to wait for the count to
+     * start again — the number a `429` is required to carry
+     * (`api-spec-v1.0.md` §1.5). It is a property of this row, so it is
+     * answered here rather than reconstructed by the caller.
+     *
+     * @return array{hits: int, retry_after: int}
      */
-    public function hit(string $bucket, string $key, int $windowSeconds, DateTimeImmutable $now): int
+    public function hit(string $bucket, string $key, int $windowSeconds, DateTimeImmutable $now): array
     {
         try {
             return $this->countWithin($bucket, $key, $windowSeconds, $now, true);
@@ -47,13 +54,16 @@ final class RateLimitRepository
         }
     }
 
+    /**
+     * @return array{hits: int, retry_after: int}
+     */
     private function countWithin(
         string $bucket,
         string $key,
         int $windowSeconds,
         DateTimeImmutable $now,
         bool $mayInsert,
-    ): int {
+    ): array {
         $pdo = $this->connection->pdo();
 
         $pdo->beginTransaction();
@@ -69,7 +79,7 @@ final class RateLimitRepository
                 if (!$mayInsert) {
                     $pdo->commit();
 
-                    return 1;
+                    return ['hits' => 1, 'retry_after' => $windowSeconds];
                 }
 
                 $insert = $pdo->prepare(
@@ -79,7 +89,7 @@ final class RateLimitRepository
                 $insert->execute(['bucket' => $bucket, 'key' => $key, 'now' => DatabaseTime::format($now)]);
                 $pdo->commit();
 
-                return 1;
+                return ['hits' => 1, 'retry_after' => $windowSeconds];
             }
 
             $started = DatabaseTime::parse(Row::string($row, 'window_start'));
@@ -89,6 +99,9 @@ final class RateLimitRepository
                 || $started->getTimestamp() + $windowSeconds <= $now->getTimestamp();
 
             $hits = $windowOver ? 1 : $hits + 1;
+
+            $endsAt = ($windowOver ? $now : $started)->getTimestamp() + $windowSeconds;
+            $retryAfter = max(1, $endsAt - $now->getTimestamp());
 
             $update = $pdo->prepare(
                 'UPDATE ' . self::TABLE . ' SET hits = :hits, window_start = :started'
@@ -103,7 +116,7 @@ final class RateLimitRepository
 
             $pdo->commit();
 
-            return $hits;
+            return ['hits' => $hits, 'retry_after' => $retryAfter];
         } catch (Throwable $error) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();

@@ -27,11 +27,15 @@ final class Response
         | JSON_UNESCAPED_UNICODE
         | JSON_THROW_ON_ERROR;
 
-    /** @param array<string, string> $headers */
+    /**
+     * @param array<string, string> $headers
+     * @param list<Cookie>          $cookies
+     */
     public function __construct(
         private readonly string $body = '',
         private readonly int $status = 200,
         private readonly array $headers = [],
+        private readonly array $cookies = [],
     ) {
     }
 
@@ -75,12 +79,31 @@ final class Response
         $headers       = $this->headers;
         $headers[$name] = $value;
 
-        return new self($this->body, $this->status, $headers);
+        return new self($this->body, $this->status, $headers, $this->cookies);
     }
 
     public function withStatus(int $status): self
     {
-        return new self($this->body, $status, $this->headers);
+        return new self($this->body, $status, $this->headers, $this->cookies);
+    }
+
+    /**
+     * Add a cookie to the response.
+     *
+     * Cookies are a list rather than part of the header map because one
+     * response may set several — signing in sets the session cookie *and*
+     * rotates the CSRF cookie — and a single `Set-Cookie` key would silently
+     * drop all but the last.
+     */
+    public function withCookie(Cookie $cookie): self
+    {
+        return new self($this->body, $this->status, $this->headers, [...$this->cookies, $cookie]);
+    }
+
+    /** @return list<Cookie> */
+    public function cookies(): array
+    {
+        return $this->cookies;
     }
 
     public function status(): int
@@ -107,6 +130,10 @@ final class Response
 
             foreach ($this->headers as $name => $value) {
                 header($name . ': ' . $value, true);
+            }
+
+            foreach ($this->cookies as $cookie) {
+                header('Set-Cookie: ' . $cookie->toHeader(), false);
             }
         }
 

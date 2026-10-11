@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Bulbula\Backend\Core;
 
+use Bulbula\Backend\Exceptions\ValidationException;
 use Throwable;
 
 /**
@@ -38,6 +39,22 @@ final class ErrorRenderer
                 'request_id' => $requestId,
             ],
         ];
+
+        // E-4: field-level detail appears only for a validation failure, and
+        // only because the caller can act on it.
+        if ($error instanceof ValidationException && $error->errors !== []) {
+            $details = [];
+
+            foreach ($error->errors as $field => $message) {
+                $details[] = [
+                    'field'   => $field,
+                    'code'    => 'invalid',
+                    'message' => $message,
+                ];
+            }
+
+            $payload['error']['details'] = $details;
+        }
 
         if ($this->debug) {
             $payload['error']['debug'] = [
@@ -87,6 +104,8 @@ final class ErrorRenderer
         }
 
         return match ($status) {
+            401     => 'You need to sign in to do that.',
+            403     => 'You do not have permission to do that.',
             404     => 'We could not find that page.',
             405     => 'That action is not allowed here.',
             419     => 'Your session expired. Please try again.',
@@ -100,6 +119,8 @@ final class ErrorRenderer
     private function heading(int $status): string
     {
         return match ($status) {
+            401     => 'Sign in required',
+            403     => 'Not permitted',
             404     => 'Page not found',
             405     => 'Method not allowed',
             419     => 'Session expired',
@@ -113,6 +134,9 @@ final class ErrorRenderer
     private function code(int $status): string
     {
         return match ($status) {
+            400     => 'bad_request',
+            401     => 'unauthenticated',
+            403     => 'forbidden',
             404     => 'not_found',
             405     => 'method_not_allowed',
             419     => 'csrf_token_mismatch',

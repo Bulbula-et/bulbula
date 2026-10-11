@@ -17,6 +17,7 @@ use Bulbula\Backend\Core\Router;
  * planned paths come from the build order in
  * docs/70-engineering/project-structure-v2.md §9:
  *
+ *   now     /sign-in · POST /sign-in/code · POST /sign-in/verify · POST /sign-out
  *   step 3  /b/{business} · /b/{business}/{listing}
  *           /b/{business}/{listing}/reviews|photos|hours|report
  *           POST /reviews · POST /reports
@@ -26,4 +27,13 @@ use Bulbula\Backend\Core\Router;
 return static function (Router $router): void {
     $router->get('/', ['Bulbula\Frontend\Controllers\HomeController', 'index']);
     $router->get('/search', ['Bulbula\Frontend\Controllers\SearchController', 'index']);
+
+    // Sign-in (C-31, C-32). Every state-changing path is a POST and carries a
+    // CSRF token; `GET /sign-in` only issues one.
+    $signIn = 'Bulbula\Frontend\Controllers\SignInController';
+
+    $router->get('/sign-in', [$signIn, 'show']);
+    $router->post('/sign-in/code', [$signIn, 'requestCode']);
+    $router->post('/sign-in/verify', [$signIn, 'verify']);
+    $router->post('/sign-out', [$signIn, 'signOut']);
 };
