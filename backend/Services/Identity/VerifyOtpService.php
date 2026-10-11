@@ -60,16 +60,22 @@ final class VerifyOtpService
         $now = $this->clock->now();
         $reference = $this->reference($email);
 
-        if (!$this->limiter->allows('otp_verify', 'email:' . $email->value)) {
+        $addressDecision = $this->limiter->check('otp_verify', 'email:' . $email->value);
+
+        if (!$addressDecision->allowed) {
             $this->logger->warning('otp.verify_refused', ['reason' => 'address_limit', 'email' => $reference]);
 
-            throw new RateLimitException();
+            throw new RateLimitException($addressDecision->retryAfter);
         }
 
-        if ($sourceNetwork !== null && !$this->limiter->allows('otp_verify', 'network:' . $sourceNetwork)) {
-            $this->logger->warning('otp.verify_refused', ['reason' => 'network_limit', 'network' => $sourceNetwork]);
+        if ($sourceNetwork !== null) {
+            $networkDecision = $this->limiter->check('otp_verify', 'network:' . $sourceNetwork);
 
-            throw new RateLimitException();
+            if (!$networkDecision->allowed) {
+                $this->logger->warning('otp.verify_refused', ['reason' => 'network_limit', 'network' => $sourceNetwork]);
+
+                throw new RateLimitException($networkDecision->retryAfter);
+            }
         }
 
         $challenge = $this->requests->latestUnconsumed($email);

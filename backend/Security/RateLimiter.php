@@ -42,6 +42,14 @@ final class RateLimiter
      */
     public function allows(string $bucket, string $key): bool
     {
+        return $this->check($bucket, $key)->allowed;
+    }
+
+    /**
+     * @throws ConfigurationException when no policy is configured for the bucket
+     */
+    public function check(string $bucket, string $key): RateLimitDecision
+    {
         $policy = $this->config->get('security.rate_limits.' . $bucket);
 
         if (!is_array($policy) || !isset($policy['limit'], $policy['window'])) {
@@ -56,10 +64,10 @@ final class RateLimiter
             );
         }
 
-        $hits = $this->limits->hit($bucket, $key, $policy['window'], $this->clock->now());
+        $hit = $this->limits->hit($bucket, $key, $policy['window'], $this->clock->now());
 
-        if ($hits <= $policy['limit']) {
-            return true;
+        if ($hit['hits'] <= $policy['limit']) {
+            return new RateLimitDecision(true, $hit['retry_after']);
         }
 
         // OTP-9: the pattern is recorded for review. The key is hashed — an
@@ -68,9 +76,9 @@ final class RateLimiter
         $this->logger->warning('rate limit exceeded', [
             'bucket' => $bucket,
             'key'    => substr(hash('sha256', $key), 0, 12),
-            'hits'   => $hits,
+            'hits'   => $hit['hits'],
         ]);
 
-        return false;
+        return new RateLimitDecision(false, $hit['retry_after']);
     }
 }

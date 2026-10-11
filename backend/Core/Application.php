@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Bulbula\Backend\Core;
 
+use Bulbula\Api\Controllers\V1\AuthController;
 use Bulbula\Api\Controllers\V1\HealthController;
 use Bulbula\Backend\Console\Command;
 use Bulbula\Backend\Console\CommandRunner;
@@ -17,11 +18,15 @@ use Bulbula\Backend\Database\Migrations\MigrationLocator;
 use Bulbula\Backend\Database\Migrations\MigrationRepository;
 use Bulbula\Backend\Database\Migrations\Migrator;
 use Bulbula\Backend\Exceptions\ConfigurationException;
+use Bulbula\Backend\Mail\LocalFileMailer;
 use Bulbula\Backend\Repositories\Identity\CustomerRepository;
 use Bulbula\Backend\Repositories\Identity\OtpRequestRepository;
 use Bulbula\Backend\Repositories\Identity\SessionRepository;
 use Bulbula\Backend\Repositories\Platform\RateLimitRepository;
+use Bulbula\Backend\Security\Csrf;
 use Bulbula\Backend\Security\RateLimiter;
+use Bulbula\Backend\Services\Identity\MailOtpSender;
+use Bulbula\Backend\Services\Identity\OtpSender;
 use Bulbula\Backend\Services\Identity\RequestOtpService;
 use Bulbula\Backend\Services\Identity\SessionService;
 use Bulbula\Backend\Services\Identity\UndeliverableOtpSender;
@@ -31,6 +36,7 @@ use Bulbula\Backend\Support\LoggerFactory;
 use Bulbula\Backend\Support\SystemClock;
 use Bulbula\Frontend\Controllers\HomeController;
 use Bulbula\Frontend\Controllers\SearchController;
+use Bulbula\Frontend\Controllers\SignInController;
 use ErrorException;
 use Psr\Log\LoggerInterface;
 
@@ -164,6 +170,39 @@ final class Application
     }
 
     /**
+     * How a sign-in code leaves the application, decided by `MAIL_TRANSPORT`.
+     *
+     * Only two outcomes are possible, and neither lies:
+     *
+     * - `local` — the development transport, which writes the message to
+     *   `storage/tmp/mail/` and refuses to run anywhere but `APP_ENV=local`.
+     * - anything else — the sender that refuses, because the only transport
+     *   left is a logger, and a code written to a log is a credential in the
+     *   one place nobody rotates (OTP-10).
+     *
+     * When the provider under D-41 lands, its transport is added here and
+     * nothing else in this method changes.
+     *
+     * @throws ConfigurationException
+     */
+    private function otpSender(Config $config): OtpSender
+    {
+        if ($config->string('mail.transport') !== 'local') {
+            return new UndeliverableOtpSender();
+        }
+
+        $directory = $config->string('mail.local_path', 'storage/tmp/mail');
+
+        return new MailOtpSender(
+            new LocalFileMailer(
+                str_starts_with($directory, '/') ? $directory : $this->basePath . '/' . $directory,
+                $config->string('app.env'),
+            ),
+            $config,
+        );
+    }
+
+    /**
      * The commands this deployment offers, as declared by the console route
      * file — a table of contents, so the file and the wiring cannot drift
      * apart silently.
@@ -249,12 +288,19 @@ final class Application
         $customers = new CustomerRepository($connection);
         $otpRequestRows = new OtpRequestRepository($connection);
 
-        $this->sessions = new SessionService(new SessionRepository($connection), $config, $clock);
+        $csrf = new Csrf($config);
+
+        $this->sessions = new SessionService(
+            new SessionRepository($connection),
+            $config,
+            $clock,
+            $csrf,
+        );
 
         $this->otpRequests = new RequestOtpService(
             $otpRequestRows,
             new RateLimiter(new RateLimitRepository($connection), $config, $clock, $this->logger),
-            new UndeliverableOtpSender(),
+            $this->otpSender($config),
             $config,
             $clock,
             $this->logger,
@@ -275,9 +321,22 @@ final class Application
         $this->kernel = new Kernel(
             $router,
             new ControllerFactory([
-                HomeController::class   => static fn (): HomeController => new HomeController($view),
-                SearchController::class => static fn (): SearchController => new SearchController($view),
-                HealthController::class => static fn (): HealthController => new HealthController($health),
+                HomeController::class     => static fn (): HomeController => new HomeController($view),
+                SearchController::class   => static fn (): SearchController => new SearchController($view),
+                HealthController::class   => static fn (): HealthController => new HealthController($health),
+                SignInController::class   => fn (): SignInController => new SignInController(
+                    $view,
+                    $config,
+                    $csrf,
+                    $this->otpRequests(),
+                    $this->otpVerifications(),
+                    $this->sessions(),
+                ),
+                AuthController::class     => fn (): AuthController => new AuthController(
+                    $this->otpRequests(),
+                    $this->otpVerifications(),
+                    $this->sessions(),
+                ),
             ]),
             $errors,
         );

@@ -11,6 +11,7 @@ use Bulbula\Backend\Repositories\Identity\CustomerRepository;
 use Bulbula\Backend\Repositories\Identity\OtpRequestRepository;
 use Bulbula\Backend\Repositories\Identity\SessionRepository;
 use Bulbula\Backend\Repositories\Platform\RateLimitRepository;
+use Bulbula\Backend\Security\Csrf;
 use Bulbula\Backend\Security\RateLimiter;
 use Bulbula\Backend\Services\Identity\RequestOtpService;
 use Bulbula\Backend\Services\Identity\SessionService;
@@ -43,7 +44,7 @@ final class VerifyOtpServiceTest extends DatabaseTestCase
 
         $requests = new OtpRequestRepository($this->database());
         $customers = new CustomerRepository($this->database());
-        $sessions = new SessionService(new SessionRepository($this->database()), $this->config(), $this->clock);
+        $sessions = new SessionService(new SessionRepository($this->database()), $this->config(), $this->clock, new Csrf($this->config()));
 
         $this->requester = new RequestOtpService(
             $requests,
@@ -79,7 +80,7 @@ final class VerifyOtpServiceTest extends DatabaseTestCase
 
         // The session is real: the token resolves.
         self::assertNotNull(
-            (new SessionService(new SessionRepository($this->database()), $this->config(), $this->clock))
+            (new SessionService(new SessionRepository($this->database()), $this->config(), $this->clock, new Csrf($this->config())))
                 ->resolve($issued->token),
         );
 

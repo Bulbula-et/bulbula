@@ -10,6 +10,7 @@ use Bulbula\Backend\Domain\Identity\PrincipalType;
 use Bulbula\Backend\Domain\Identity\Session;
 use Bulbula\Backend\Domain\Identity\Surface;
 use Bulbula\Backend\Repositories\Identity\SessionRepository;
+use Bulbula\Backend\Security\Csrf;
 use Bulbula\Backend\Support\Clock;
 
 /**
@@ -32,6 +33,7 @@ final class SessionService
         private readonly SessionRepository $sessions,
         private readonly Config $config,
         private readonly Clock $clock,
+        private readonly Csrf $csrf,
     ) {
     }
 
@@ -46,6 +48,12 @@ final class SessionService
         $now = $this->clock->now();
         $token = $this->newToken();
 
+        // A CSRF token is issued with the session and stored as its hash, so
+        // every later state-changing request can be checked against *this*
+        // session rather than against any cookie the browser happens to hold
+        // (CS-1, CS-4).
+        $csrfToken = $this->csrf->newToken();
+
         $session = $this->sessions->create(
             $principalType,
             $principalId,
@@ -55,9 +63,10 @@ final class SessionService
             $now->modify('+' . $this->absoluteLifetime() . ' seconds'),
             $userAgent,
             $network,
+            $this->csrf->hash($csrfToken),
         );
 
-        return new IssuedSession($session, $token);
+        return new IssuedSession($session, $token, $csrfToken);
     }
 
     /**
@@ -96,6 +105,7 @@ final class SessionService
             lastActiveAt: $now,
             expiresAt: $session->expiresAt,
             revokedAt: null,
+            csrfHash: $session->csrfHash,
         );
     }
 

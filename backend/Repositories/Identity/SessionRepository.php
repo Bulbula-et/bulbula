@@ -42,12 +42,13 @@ final class SessionRepository
         DateTimeImmutable $expiresAt,
         ?string $userAgent,
         ?string $network,
+        string $csrfHash,
     ): Session {
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE
             . ' (principal_type, principal_id, token_hash, surface, created_at, last_active_at, expires_at,'
-            . ' revoked_at, user_agent, network_marker)'
-            . ' VALUES (:type, :principal, :token_hash, :surface, :now, :now, :expires_at, NULL, :agent, :network)',
+            . ' revoked_at, user_agent, network_marker, csrf_hash)'
+            . ' VALUES (:type, :principal, :token_hash, :surface, :now, :now, :expires_at, NULL, :agent, :network, :csrf)',
         );
 
         $statement->execute([
@@ -59,6 +60,7 @@ final class SessionRepository
             'expires_at'  => DatabaseTime::format($expiresAt),
             'agent'       => $userAgent,
             'network'     => $network,
+            'csrf'        => $csrfHash,
         ]);
 
         return $this->findById((int) $this->connection->pdo()->lastInsertId())
@@ -104,6 +106,7 @@ final class SessionRepository
             expiresAt: DatabaseTime::parse(Row::string($row, 'expires_at'))
                 ?? throw new \UnexpectedValueException('A session row has no expires_at.'),
             revokedAt: DatabaseTime::parse(Row::nullableString($row, 'revoked_at')),
+            csrfHash: Row::nullableString($row, 'csrf_hash'),
         );
     }
 

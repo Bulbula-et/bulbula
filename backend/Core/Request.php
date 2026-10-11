@@ -18,6 +18,7 @@ final class Request
      * @param array<string, mixed>  $query
      * @param array<string, mixed>  $body
      * @param array<string, string> $headers
+     * @param array<string, string> $cookies
      */
     public function __construct(
         public readonly string $method,
@@ -26,6 +27,7 @@ final class Request
         public readonly array $body = [],
         public readonly array $headers = [],
         public readonly ?string $clientIp = null,
+        public readonly array $cookies = [],
     ) {
     }
 
@@ -44,6 +46,7 @@ final class Request
             body: self::readBody(),
             headers: self::readHeaders(),
             clientIp: self::nullableString($_SERVER['REMOTE_ADDR'] ?? null),
+            cookies: self::readCookies(),
         );
     }
 
@@ -66,6 +69,23 @@ final class Request
         $decoded = json_decode($raw === false ? '' : $raw, true);
 
         return is_array($decoded) ? self::stringKeyed($decoded) : [];
+    }
+
+    /**
+     * The cookies the browser sent. Read once, here, like everything else from
+     * the outside world.
+     *
+     * @return array<string, string>
+     */
+    private static function readCookies(): array
+    {
+        $cookies = [];
+
+        foreach ($_COOKIE as $name => $value) {
+            $cookies[(string) $name] = self::scalarString($value, '');
+        }
+
+        return $cookies;
     }
 
     /** @return array<string, string> */
@@ -112,6 +132,26 @@ final class Request
     public function header(string $name, ?string $default = null): ?string
     {
         return $this->headers[strtolower($name)] ?? $default;
+    }
+
+    /** The cookie value, or null when the browser did not send one. */
+    public function cookie(string $name): ?string
+    {
+        return $this->cookies[$name] ?? null;
+    }
+
+    /** The bearer token from the Authorization header, if it is a bearer one. */
+    public function bearerToken(): ?string
+    {
+        $header = $this->header('authorization');
+
+        if ($header === null || !str_starts_with(strtolower($header), 'bearer ')) {
+            return null;
+        }
+
+        $token = trim(substr($header, 7));
+
+        return $token === '' ? null : $token;
     }
 
     public function input(string $key, mixed $default = null): mixed

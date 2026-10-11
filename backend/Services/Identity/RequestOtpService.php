@@ -48,16 +48,22 @@ final class RequestOtpService
         $now = $this->clock->now();
         $reference = $this->reference($email);
 
-        if (!$this->limiter->allows('otp_request', 'email:' . $email->value)) {
+        $addressDecision = $this->limiter->check('otp_request', 'email:' . $email->value);
+
+        if (!$addressDecision->allowed) {
             $this->logger->warning('otp.request_refused', ['reason' => 'address_limit', 'email' => $reference]);
 
-            throw new RateLimitException();
+            throw new RateLimitException($addressDecision->retryAfter);
         }
 
-        if ($sourceNetwork !== null && !$this->limiter->allows('otp_request', 'network:' . $sourceNetwork)) {
-            $this->logger->warning('otp.request_refused', ['reason' => 'network_limit', 'network' => $sourceNetwork]);
+        if ($sourceNetwork !== null) {
+            $networkDecision = $this->limiter->check('otp_request', 'network:' . $sourceNetwork);
 
-            throw new RateLimitException();
+            if (!$networkDecision->allowed) {
+                $this->logger->warning('otp.request_refused', ['reason' => 'network_limit', 'network' => $sourceNetwork]);
+
+                throw new RateLimitException($networkDecision->retryAfter);
+            }
         }
 
         $cooldown = $this->config->int('security.otp.resend_cooldown', 60);
@@ -66,7 +72,9 @@ final class RequestOtpService
         if ($last !== null && $last->getTimestamp() + $cooldown > $now->getTimestamp()) {
             $this->logger->warning('otp.request_refused', ['reason' => 'cooldown', 'email' => $reference]);
 
-            throw new RateLimitException();
+            // The cooldown is a limit of the same family, and the wait is
+            // exactly the time left on it.
+            throw new RateLimitException($last->getTimestamp() + $cooldown - $now->getTimestamp());
         }
 
         $code = $this->generateCode();
