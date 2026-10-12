@@ -729,6 +729,26 @@ under `backend/`, so the class of defect cannot return. Worth remembering when
 reading the test-strategy table: the suite is a filter, not a proof, for engine
 differences.
 
+**Update, 2026-10-13 (b) — the last profile endpoint, and the caching floor.**
+`GET /api/v1/businesses/{slug}/branches` closes the profile family of api-spec
+§2.3 short of `/reviews` (M5) and `/nearby` (M3): it serves the profile's own
+Branch objects, so the two shapes cannot drift. The development host's database
+was migrated to the slice's schema the same day (eight migrations, batch 2,
+MariaDB 11.4.13) — MG-3 leaves that step to the operator by design, and the
+addresses that had answered `500` answered their first honest `404` immediately
+after.
+
+Reading the live host also exposed a defect no test in this repository could
+show, and it is the same lesson as the binding one, one layer up: where the
+application stated no `Cache-Control`, **the web server stated one for it** —
+`public, max-age=2592000` — and it landed on `/sign-in`, a page that hands out
+a CSRF token, and on every error page. Nothing under this tree sets that header
+and `php -S` never adds one, so the suite was silent by construction. The
+application now states its policy on every response
+(`backend/Core/CachePolicy.php`, applied in `Kernel::handle`): a response that
+states none is `no-store`, and a response that is genuinely public opts in with
+a content-derived `ETag` exactly as the profile does.
+
 ---
 
 *Companion records: `php-application-structure-v1.0.md` (superseded; its feature

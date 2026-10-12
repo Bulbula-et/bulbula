@@ -48,14 +48,47 @@ final class BusinessController
     /** @param array<string, string> $vars */
     public function show(Request $request, array $vars): Response
     {
-        $slug    = Slug::tryFromString($vars['slug'] ?? '');
-        $profile = $slug !== null ? $this->listings->find($slug) : null;
+        return $this->cacheable($request, ['data' => $this->payload($this->profileOr404($vars['slug'] ?? ''))]);
+    }
+
+    /**
+     * `GET /api/v1/businesses/{slug}/branches` — the Branches the profile
+     * already carries, on their own (api-spec §2.3, C-08, C-09).
+     *
+     * A client that wants locations and contact actions — a map view, a
+     * "call this branch" button — need not fetch and discard a whole profile.
+     * The shape is the profile's Branch object, unchanged, so the two cannot
+     * drift.
+     *
+     * @param array<string, string> $vars
+     */
+    public function branches(Request $request, array $vars): Response
+    {
+        $profile = $this->profileOr404($vars['slug'] ?? '');
+
+        return $this->cacheable($request, [
+            'data' => array_map(
+                fn (Branch $branch): array => $this->branchPayload($branch, $profile),
+                $profile->branches,
+            ),
+        ]);
+    }
+
+    /**
+     * One lookup and one answer for every miss: a slug that never existed, a
+     * draft, and an unpublished Listing are indistinguishable here (PR-1,
+     * C-08, TR-35).
+     */
+    private function profileOr404(string $slug): ListingProfile
+    {
+        $parsed  = Slug::tryFromString($slug);
+        $profile = $parsed !== null ? $this->listings->find($parsed) : null;
 
         if ($profile === null) {
             throw new HttpNotFoundException(self::MISS);
         }
 
-        return $this->cacheable($request, ['data' => $this->payload($profile)]);
+        return $profile;
     }
 
     /** @return array<string, mixed> */

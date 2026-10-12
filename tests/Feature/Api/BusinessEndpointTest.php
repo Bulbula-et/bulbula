@@ -116,13 +116,82 @@ final class BusinessEndpointTest extends ApplicationTestCase
         $unpublished = $this->scenario->publishedBusiness('Bole Dental', Slug::fromString('bole-dental'));
         $this->scenario->businesses->markUnpublished($unpublished->id, $this->clock->now(), 7);
 
-        foreach (['/api/v1/businesses/tsegaye-pharmacy', '/api/v1/businesses/bole-dental', '/api/v1/businesses/never-created'] as $path) {
+        foreach ([
+            '/api/v1/businesses/tsegaye-pharmacy',
+            '/api/v1/businesses/tsegaye-pharmacy/branches',
+            '/api/v1/businesses/bole-dental',
+            '/api/v1/businesses/bole-dental/branches',
+            '/api/v1/businesses/never-created',
+            '/api/v1/businesses/never-created/branches',
+        ] as $path) {
             $response = $this->get($path);
 
             self::assertSame(404, $response->status(), $path);
             self::assertSame('not_found', $this->json($response)['error']['code']);
             self::assertStringNotContainsString('Bole Dental', $response->body(), 'a refusal never describes what it is refusing (TR-35)');
         }
+    }
+
+    #[Test]
+    public function the_branches_of_a_published_business_are_served_on_their_own(): void
+    {
+        $this->scenario->publishedBusiness();
+
+        $response = $this->get('/api/v1/businesses/tsegaye-pharmacy/branches');
+
+        self::assertSame(200, $response->status());
+
+        $payload = $this->json($response);
+        $branch  = $payload['data'][0];
+
+        self::assertSame('bole-bulbula', $branch['area']['slug']);
+        self::assertSame('Bole', $branch['sub_city']['name']);
+        self::assertSame('Meskel Flower Road', $branch['address']);
+        self::assertSame('+251911000000', $branch['contact']['phone']);
+        self::assertSame(9.01, $branch['coordinates']['latitude']);
+        self::assertSame('active', $branch['status'], 'the Branch lifecycle state, exactly as recorded');
+
+        self::assertSame(
+            $this->json($this->get('/api/v1/businesses/tsegaye-pharmacy'))['data']['branches'],
+            $payload['data'],
+            'the endpoint serves the profile’s Branch objects, so the two shapes cannot drift',
+        );
+
+        $this->assertNoInternalIdentifiers($payload);
+    }
+
+    #[Test]
+    public function the_branches_response_caches_publicly_and_revalidates_with_its_etag(): void
+    {
+        $this->scenario->publishedBusiness();
+
+        $first = $this->get('/api/v1/businesses/tsegaye-pharmacy/branches');
+        $etag  = $first->headers()['ETag'] ?? null;
+
+        self::assertNotNull($etag, 'a public read carries a content-derived validator (HC-4)');
+        self::assertStringContainsString('public, max-age=', (string) ($first->headers()['Cache-Control'] ?? ''));
+
+        $second = $this->kernel()->handle(new Request(
+            'GET',
+            '/api/v1/businesses/tsegaye-pharmacy/branches',
+            headers: ['if-none-match' => $etag],
+        ));
+
+        self::assertSame(304, $second->status());
+        self::assertSame('', $second->body());
+    }
+
+    #[Test]
+    public function a_miss_is_never_cached_publicly(): void
+    {
+        $response = $this->get('/api/v1/businesses/never-created');
+
+        self::assertSame(404, $response->status());
+        self::assertSame(
+            'no-store',
+            $response->headers()['Cache-Control'] ?? null,
+            'a 404 a cache keeps for a month would hide the listing that appears later',
+        );
     }
 
     #[Test]
