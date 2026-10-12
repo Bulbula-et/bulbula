@@ -45,6 +45,40 @@ final class AreaRepository
         return is_array($row) ? $this->hydrate($row) : null;
     }
 
+    /**
+     * The Areas with those ids, keyed by id — one query for a whole page's
+     * worth of rows rather than one query per row (DB-10).
+     *
+     * @param list<int> $ids
+     *
+     * @return array<int, Area>
+     */
+    public function byIds(array $ids): array
+    {
+        $ids = array_values(array_unique($ids));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $statement = $this->connection->pdo()->prepare(
+            'SELECT * FROM ' . self::TABLE . ' WHERE id IN ('
+            . implode(',', array_fill(0, count($ids), '?')) . ')',
+        );
+        $statement->execute($ids);
+
+        $rows = [];
+
+        foreach ($statement->fetchAll() as $row) {
+            if (is_array($row)) {
+                $hydrated          = $this->hydrate($row);
+                $rows[$hydrated->id] = $hydrated;
+            }
+        }
+
+        return $rows;
+    }
+
     public function create(
         int $subCityId,
         Slug $slug,
@@ -57,17 +91,23 @@ final class AreaRepository
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE
             . ' (sub_city_id, slug, name, name_am, display_order, visible, created_at, updated_at)'
-            . ' VALUES (:sub_city, :slug, :name, :name_am, :order, :visible, :now, :now)',
+            . ' VALUES (:sub_city, :slug, :name, :name_am, :order, :visible, :created_at, :updated_at)',
         );
 
+        // One stamp, two slots: MySQL binds a name once per statement, so the
+        // two timestamps are separate parameters however equal their values
+        // (see the note on PDO_MySQL in ConnectionFactory).
+        $stamp = DatabaseTime::format($now);
+
         $statement->execute([
-            'sub_city' => $subCityId,
-            'slug'     => $slug->value,
-            'name'     => $name,
-            'name_am'  => $nameAm,
-            'order'    => $displayOrder,
-            'visible'  => $visible ? 1 : 0,
-            'now'      => DatabaseTime::format($now),
+            'sub_city'   => $subCityId,
+            'slug'       => $slug->value,
+            'name'       => $name,
+            'name_am'    => $nameAm,
+            'order'      => $displayOrder,
+            'visible'    => $visible ? 1 : 0,
+            'created_at' => $stamp,
+            'updated_at' => $stamp,
         ]);
 
         $id = (int) $this->connection->pdo()->lastInsertId();

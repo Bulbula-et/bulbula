@@ -213,6 +213,93 @@ final class BoundariesTest extends TestCase
         self::assertSame([], $offenders, 'A query outside the data layer is a query nobody owns.');
     }
 
+    /**
+     * A named placeholder is bound **once per statement**.
+     *
+     * SQLite binds `:now` at every occurrence it appears; MySQL — whose
+     * **native** prepared statements this application uses
+     * (`ConnectionFactory`, `PDO::ATTR_EMULATE_PREPARES => false`) — binds a
+     * name once per statement and refuses anything else with
+     * `SQLSTATE[HY093] Invalid parameter number`. A statement that runs on the
+     * test engine and dies on the production engine is exactly the difference a
+     * suite that runs on one engine cannot show you, so it is checked
+     * statically, on every commit, the way `DB-10` is.
+     *
+     * Two timestamps that happen to be equal are still two parameters:
+     * `:created_at, :updated_at`.
+     */
+    #[Test]
+    public function a_named_placeholder_is_never_bound_twice_in_one_statement(): void
+    {
+        $offenders = [];
+
+        foreach (SourceFiles::in('backend', 'database/migrations') as $file) {
+            foreach (self::sqlFragments($file) as $fragment) {
+                preg_match_all('/(?<!:):([a-z_]+)/', $fragment, $matches);
+
+                $names = $matches[1] ?? [];
+
+                foreach (array_count_values($names) as $name => $count) {
+                    if ($count > 1) {
+                        $offenders[] = SourceFiles::relative($file) . ' binds :' . $name . ' ' . $count . ' times';
+                    }
+                }
+            }
+        }
+
+        self::assertSame(
+            [],
+            $offenders,
+            'PDO_MySQL refuses a named parameter bound twice in one statement; give each slot its own name '
+            . '(one stamp, two parameters).',
+        );
+    }
+
+    /**
+     * The SQL-looking string literals of a file, each concatenation chain kept
+     * whole — a statement is built as `'…' . '…'` in this codebase, and a
+     * fragment is only a statement when the two halves are read together.
+     *
+     * @return list<string>
+     */
+    private static function sqlFragments(string $file): array
+    {
+        $tokens = token_get_all(SourceFiles::withoutComments($file));
+
+        $fragments = [];
+        $current   = '';
+
+        foreach ($tokens as $token) {
+            if (is_array($token) && $token[0] === T_CONSTANT_ENCAPSED_STRING) {
+                $current .= $token[1];
+
+                continue;
+            }
+
+            if ($current === '') {
+                continue;
+            }
+
+            // A concatenation continues; anything else ends the fragment.
+            if (is_array($token) && ($token[0] === T_WHITESPACE || $token[0] === T_COMMENT)) {
+                continue;
+            }
+
+            if ($token === '.') {
+                continue;
+            }
+
+            $fragments[] = $current;
+            $current     = '';
+        }
+
+        if ($current !== '') {
+            $fragments[] = $current;
+        }
+
+        return $fragments;
+    }
+
     #[Test]
     public function a_surface_never_reaches_the_database_directly(): void
     {

@@ -425,6 +425,14 @@ that creates the table.
 
 The test suite runs against in-memory SQLite, which keeps it fast and
 hermetic, so migrations stay portable or branch explicitly where they cannot.
+One difference between the two engines is worth stating outright, because SQL
+that runs on the test engine and dies on the production engine is invisible to
+a suite that runs on one of them: **a named parameter is bound once per
+statement.** SQLite will bind `:now` at every occurrence; MySQL's native
+prepared statements refuse the statement (`HY093 Invalid parameter number`).
+Two timestamps that happen to be equal are still two parameters —
+`:created_at, :updated_at`. `tests/Arch/BoundariesTest` enforces this
+statically, on every commit.
 
 ---
 

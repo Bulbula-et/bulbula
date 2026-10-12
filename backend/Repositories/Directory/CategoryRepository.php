@@ -54,6 +54,38 @@ final class CategoryRepository
     }
 
     /** @throws UnexpectedValueException when the parent would create a third level (D-06) */
+    /**
+     * The Categories a Business carries, the primary one first — one query,
+     * whichever order a caller needs (D-57).
+     *
+     * @return list<array{category: Category, isPrimary: bool}>
+     */
+    public function classificationsFor(int $businessId): array
+    {
+        $statement = $this->connection->pdo()->prepare(
+            'SELECT c.*, bc.is_primary FROM business_categories bc'
+            . ' INNER JOIN categories c ON c.id = bc.category_id'
+            . ' WHERE bc.business_id = :business'
+            . ' ORDER BY bc.is_primary DESC, c.display_order ASC, c.name ASC',
+        );
+        $statement->execute(['business' => $businessId]);
+
+        $classifications = [];
+
+        foreach ($statement->fetchAll() as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $classifications[] = [
+                'category'  => $this->hydrate($row),
+                'isPrimary' => Row::int($row, 'is_primary') === 1,
+            ];
+        }
+
+        return $classifications;
+    }
+
     public function create(
         ?int $parentId,
         Slug $slug,
@@ -79,18 +111,22 @@ final class CategoryRepository
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE
             . ' (parent_id, slug, name, name_am, display_order, visible, icon, created_at, updated_at)'
-            . ' VALUES (:parent, :slug, :name, :name_am, :order, :visible, :icon, :now, :now)',
+            . ' VALUES (:parent, :slug, :name, :name_am, :order, :visible, :icon, :created_at, :updated_at)',
         );
+
+        // One stamp, two slots: PDO_MySQL binds a name once per statement.
+        $stamp = DatabaseTime::format($now);
 
         $statement->execute([
             'parent'   => $parentId,
             'slug'     => $slug->value,
             'name'     => $name,
             'name_am'  => $nameAm,
-            'order'    => $displayOrder,
-            'visible'  => $visible ? 1 : 0,
-            'icon'     => $icon,
-            'now'      => DatabaseTime::format($now),
+            'order'      => $displayOrder,
+            'visible'    => $visible ? 1 : 0,
+            'icon'       => $icon,
+            'created_at' => $stamp,
+            'updated_at' => $stamp,
         ]);
 
         $id = (int) $this->connection->pdo()->lastInsertId();

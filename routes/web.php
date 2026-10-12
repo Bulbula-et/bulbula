@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Bulbula\Backend\Core\Router;
+use Bulbula\Backend\Domain\Directory\Slug;
 
 /**
  * Web surface: server-rendered pages for people.
@@ -18,7 +19,8 @@ use Bulbula\Backend\Core\Router;
  * docs/70-engineering/project-structure-v2.md §9:
  *
  *   now     /sign-in · POST /sign-in/code · POST /sign-in/verify · POST /sign-out
- *   step 3  /b/{business} · /b/{business}/{listing}
+ *           /b/{business}
+ *   step 3  /b/{business}/{listing}
  *           /b/{business}/{listing}/reviews|photos|hours|report
  *           POST /reviews · POST /reports
  *   step 4  /search?q= · /categories · /c/{category} · /areas · /a/{area}
@@ -27,6 +29,15 @@ use Bulbula\Backend\Core\Router;
 return static function (Router $router): void {
     $router->get('/', ['Bulbula\Frontend\Controllers\HomeController', 'index']);
     $router->get('/search', ['Bulbula\Frontend\Controllers\SearchController', 'index']);
+
+    // The public Business profile (IA §2.1). The segment carries the slug
+    // grammar itself — `Slug::ROUTE_PATTERN` — so a malformed address never
+    // reaches a handler, and the grammar cannot drift from the one the
+    // database stores.
+    $router->get(
+        '/b/{business:' . Slug::ROUTE_PATTERN . '}',
+        ['Bulbula\Frontend\Controllers\ListingController', 'show'],
+    );
 
     // Sign-in (C-31, C-32). Every state-changing path is a POST and carries a
     // CSRF token; `GET /sign-in` only issues one.

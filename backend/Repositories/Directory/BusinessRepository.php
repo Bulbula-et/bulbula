@@ -90,8 +90,11 @@ final class BusinessRepository
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE
             . ' (slug, name, legal_name, name_am, status, version, created_by, created_at, updated_at)'
-            . ' VALUES (:slug, :name, :legal_name, :name_am, :status, 1, :actor, :now, :now)',
+            . ' VALUES (:slug, :name, :legal_name, :name_am, :status, 1, :actor, :created_at, :updated_at)',
         );
+
+        // One stamp, two slots: PDO_MySQL binds a name once per statement.
+        $stamp = DatabaseTime::format($now);
 
         $statement->execute([
             'slug'       => $slug->value,
@@ -100,7 +103,8 @@ final class BusinessRepository
             'name_am'    => $nameAm,
             'status'     => BusinessState::Draft->value,
             'actor'      => $actorId,
-            'now'        => DatabaseTime::format($now),
+            'created_at' => $stamp,
+            'updated_at' => $stamp,
         ]);
 
         $id = (int) $this->connection->pdo()->lastInsertId();
@@ -154,15 +158,19 @@ final class BusinessRepository
     {
         $statement = $this->connection->pdo()->prepare(
             'UPDATE ' . self::TABLE
-            . ' SET status = :status, published_at = :now, version = version + 1, updated_at = :now, updated_by = :actor'
+            . ' SET status = :status, published_at = :published_at, version = version + 1,'
+            . ' updated_at = :updated_at, updated_by = :actor'
             . ' WHERE id = :id',
         );
 
+        $stamp = DatabaseTime::format($now);
+
         $statement->execute([
-            'status' => BusinessState::Published->value,
-            'now'    => DatabaseTime::format($now),
-            'actor'  => $actorId,
-            'id'     => $id,
+            'status'       => BusinessState::Published->value,
+            'published_at' => $stamp,
+            'updated_at'   => $stamp,
+            'actor'        => $actorId,
+            'id'           => $id,
         ]);
     }
 
@@ -170,15 +178,19 @@ final class BusinessRepository
     {
         $statement = $this->connection->pdo()->prepare(
             'UPDATE ' . self::TABLE
-            . ' SET status = :status, unpublished_at = :now, version = version + 1, updated_at = :now, updated_by = :actor'
+            . ' SET status = :status, unpublished_at = :unpublished_at, version = version + 1,'
+            . ' updated_at = :updated_at, updated_by = :actor'
             . ' WHERE id = :id',
         );
 
+        $stamp = DatabaseTime::format($now);
+
         $statement->execute([
-            'status' => BusinessState::Unpublished->value,
-            'now'    => DatabaseTime::format($now),
-            'actor'  => $actorId,
-            'id'     => $id,
+            'status'         => BusinessState::Unpublished->value,
+            'unpublished_at' => $stamp,
+            'updated_at'     => $stamp,
+            'actor'          => $actorId,
+            'id'             => $id,
         ]);
     }
 
@@ -187,17 +199,20 @@ final class BusinessRepository
     {
         $statement = $this->connection->pdo()->prepare(
             'UPDATE ' . self::TABLE
-            . ' SET status = :status, closed_at = :now, closure_reason = :reason,'
-            . ' version = version + 1, updated_at = :now, updated_by = :actor'
+            . ' SET status = :status, closed_at = :closed_at, closure_reason = :reason,'
+            . ' version = version + 1, updated_at = :updated_at, updated_by = :actor'
             . ' WHERE id = :id',
         );
 
+        $stamp = DatabaseTime::format($now);
+
         $statement->execute([
-            'status' => BusinessState::Closed->value,
-            'now'    => DatabaseTime::format($now),
-            'reason' => $reason,
-            'actor'  => $actorId,
-            'id'     => $id,
+            'status'     => BusinessState::Closed->value,
+            'closed_at'  => $stamp,
+            'reason'     => $reason,
+            'updated_at' => $stamp,
+            'actor'      => $actorId,
+            'id'         => $id,
         ]);
     }
 
@@ -287,8 +302,10 @@ final class BusinessRepository
         }
 
         if ($phone !== null && $phone !== '') {
-            $conditions[] = '(br.phone = :phone OR br.phone_secondary = :phone)';
-            $parameters['phone'] = $phone;
+            // Two slots, one value: PDO_MySQL binds a name once per statement.
+            $conditions[] = '(br.phone = :phone OR br.phone_secondary = :phone_secondary)';
+            $parameters['phone']           = $phone;
+            $parameters['phone_secondary'] = $phone;
         }
 
         $statement = $this->connection->pdo()->prepare(

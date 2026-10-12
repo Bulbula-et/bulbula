@@ -33,19 +33,57 @@ final class SubCityRepository
         return is_array($row) ? $this->hydrate($row) : null;
     }
 
+    /**
+     * The SubCitys with those ids, keyed by id — one query for a whole page's
+     * worth of rows rather than one query per row (DB-10).
+     *
+     * @param list<int> $ids
+     *
+     * @return array<int, SubCity>
+     */
+    public function byIds(array $ids): array
+    {
+        $ids = array_values(array_unique($ids));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $statement = $this->connection->pdo()->prepare(
+            'SELECT * FROM ' . self::TABLE . ' WHERE id IN ('
+            . implode(',', array_fill(0, count($ids), '?')) . ')',
+        );
+        $statement->execute($ids);
+
+        $rows = [];
+
+        foreach ($statement->fetchAll() as $row) {
+            if (is_array($row)) {
+                $hydrated          = $this->hydrate($row);
+                $rows[$hydrated->id] = $hydrated;
+            }
+        }
+
+        return $rows;
+    }
+
     public function create(Slug $slug, string $name, ?string $nameAm, string $city, DateTimeImmutable $now): SubCity
     {
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE . ' (slug, name, name_am, city, created_at, updated_at)'
-            . ' VALUES (:slug, :name, :name_am, :city, :now, :now)',
+            . ' VALUES (:slug, :name, :name_am, :city, :created_at, :updated_at)',
         );
 
+        // One stamp, two slots: PDO_MySQL binds a name once per statement.
+        $stamp = DatabaseTime::format($now);
+
         $statement->execute([
-            'slug'    => $slug->value,
-            'name'    => $name,
-            'name_am' => $nameAm,
-            'city'    => $city,
-            'now'     => DatabaseTime::format($now),
+            'slug'       => $slug->value,
+            'name'       => $name,
+            'name_am'    => $nameAm,
+            'city'       => $city,
+            'created_at' => $stamp,
+            'updated_at' => $stamp,
         ]);
 
         $id = (int) $this->connection->pdo()->lastInsertId();

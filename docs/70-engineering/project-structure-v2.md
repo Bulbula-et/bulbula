@@ -711,9 +711,23 @@ taxonomy levels** ("exactly one primary Category"), so any Category may be
 primary or secondary; and the duplicate signal deliberately excludes
 area-alone, which every business in an area shares.
 
-Still to come on this branch before it merges: the public read path —
-`/b/{business}` with redirect resolution (IAR-3) — and the API v1 profile
-endpoints (`api-spec-v1.0.md` — `/businesses/{slug}`).
+**Update, 2026-10-13 — the read path landed, and the slice is complete.**
+`/b/{business}` serves the profile (a moved slug answers 301 to where the
+redirect table says it went — IAR-3; everything not published answers the same
+404); `GET /api/v1/businesses/{slug}` serves the same record to machines under
+the api-spec §2.3 rules (PR-1…PR-6), with a content-derived `ETag` and public
+cache headers (§1.8). `PublicListingService` is the one object that decides
+what a stranger may see; both surfaces render it and neither queries.
+
+Two defects that the SQLite-only suite **could not show** were found by running
+the write path and the read path against a real MariaDB before the merge:
+every INSERT and UPDATE bound `:now` twice, which MySQL's native prepares
+refuse with `HY093`, and the duplicate-detection query did the same with
+`:phone`. Both are fixed — one stamp, two parameters — and
+`tests/Arch/BoundariesTest` now refuses a named parameter bound twice anywhere
+under `backend/`, so the class of defect cannot return. Worth remembering when
+reading the test-strategy table: the suite is a filter, not a proof, for engine
+differences.
 
 ---
 

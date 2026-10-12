@@ -14,14 +14,20 @@ use Bulbula\Backend\Domain\Directory\Slug;
 use Bulbula\Backend\Domain\Directory\SubCity;
 use Bulbula\Backend\Domain\Operations\PermissionMethod;
 use Bulbula\Backend\Domain\Operations\PermissionRecord;
+use Bulbula\Backend\Domain\Platform\ActorType;
 use Bulbula\Backend\Repositories\Directory\AreaRepository;
 use Bulbula\Backend\Repositories\Directory\BranchRepository;
 use Bulbula\Backend\Repositories\Directory\BusinessRepository;
 use Bulbula\Backend\Repositories\Directory\CategoryRepository;
 use Bulbula\Backend\Repositories\Directory\SubCityRepository;
 use Bulbula\Backend\Repositories\Operations\PermissionRecordRepository;
+use Bulbula\Backend\Repositories\Platform\AuditEntryRepository;
 use Bulbula\Backend\Repositories\Platform\RedirectRepository;
+use Bulbula\Backend\Services\Directory\PublicationGate;
+use Bulbula\Backend\Services\Directory\PublishListingService;
+use Bulbula\Backend\Services\Platform\AuditRecorder;
 use Bulbula\Backend\Support\Clock;
+use Psr\Log\NullLogger;
 
 /**
  * A seeded Directory, for the tests that exercise the business/listing rules.
@@ -140,6 +146,36 @@ final class DirectoryScenario
             PermissionMethod::InPerson,
             $this->clock->now(),
             $this->clock->now(),
+        );
+    }
+
+    /**
+     * A Business in the state the public read path requires: classified under
+     * one primary Category, with a Branch and a granted Permission record,
+     * published through the real gate — so a read test never asserts against a
+     * state the application could not actually reach (TR-49).
+     */
+    public function publishedBusiness(string $name = 'Tsegaye Pharmacy', ?Slug $slug = null): Business
+    {
+        $business = $this->business($name, $slug);
+        $this->branch($business);
+        $this->businesses->assignCategory($business->id, $this->category()->id, true, $this->clock->now());
+        $this->permission($business);
+
+        return $this->publisher()->publish($business->id, ActorType::Operator, 7);
+    }
+
+    /** The real publication path, wired as the application wires it. */
+    private function publisher(): PublishListingService
+    {
+        return new PublishListingService(
+            $this->businesses,
+            $this->permissions,
+            new PublicationGate($this->businesses, $this->branches),
+            new AuditRecorder(new AuditEntryRepository($this->connection), $this->clock),
+            $this->connection,
+            new NullLogger(),
+            $this->clock,
         );
     }
 

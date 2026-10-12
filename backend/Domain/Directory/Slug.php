@@ -28,7 +28,16 @@ final readonly class Slug
     /** The longest slug the column and the route constraint accept. */
     public const MAX_LENGTH = 80;
 
-    private const PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
+    /**
+     * The grammar as a route constraint.
+     *
+     * `architecture.md` §6 requires every dynamic segment to be constrained,
+     * and the constraint is this string and no other: a route that widened the
+     * grammar would mint URLs this class then refuses.
+     */
+    public const ROUTE_PATTERN = '[a-z0-9]+(?:-[a-z0-9]+)*';
+
+    private const PATTERN = '/^' . self::ROUTE_PATTERN . '$/';
 
     private function __construct(public string $value)
     {
@@ -45,6 +54,21 @@ final readonly class Slug
         }
 
         return new self($value);
+    }
+
+    /**
+     * The value as a slug, or null when it is not one.
+     *
+     * A malformed segment is a miss, not an error: the caller turns null into
+     * the same not-found a stranger's typo gets (IAR-8).
+     */
+    public static function tryFromString(string $value): ?self
+    {
+        try {
+            return self::fromString($value);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
     }
 
     /**

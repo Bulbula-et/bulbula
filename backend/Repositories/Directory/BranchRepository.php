@@ -96,12 +96,15 @@ final class BranchRepository
         DateTimeImmutable $now,
         BranchState $state = BranchState::Active,
     ): Branch {
+        // One stamp, two slots: PDO_MySQL binds a name once per statement.
+        $stamp = DatabaseTime::format($now);
+
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE
             . ' (business_id, area_id, sub_city_id, label, address_line, latitude, longitude,'
             . ' phone, phone_secondary, email, status, is_primary, created_at, updated_at)'
             . ' VALUES (:business, :area, :sub_city, :label, :address, :latitude, :longitude,'
-            . ' :phone, :phone_secondary, :email, :status, :primary, :now, :now)',
+            . ' :phone, :phone_secondary, :email, :status, :primary, :created_at, :updated_at)',
         );
 
         $statement->execute([
@@ -112,12 +115,13 @@ final class BranchRepository
             'address'         => $addressLine,
             'latitude'        => $latitude,
             'longitude'       => $longitude,
+            'created_at'      => $stamp,
+            'updated_at'      => $stamp,
             'phone'           => $phone,
             'phone_secondary' => $phoneSecondary,
             'email'           => $email,
             'status'          => $state->value,
             'primary'         => $isPrimary ? 1 : 0,
-            'now'             => DatabaseTime::format($now),
         ]);
 
         $id = (int) $this->connection->pdo()->lastInsertId();

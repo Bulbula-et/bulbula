@@ -270,6 +270,95 @@ final class BusinessServiceTest extends DatabaseTestCase
         $this->service()->close($business->id, 'Second reason', ActorType::Operator, 7);
     }
 
+    #[Test]
+    public function a_website_that_is_not_http_or_https_is_refused_and_not_stored(): void
+    {
+        $business = $this->scenario->business();
+
+        try {
+            $this->service()->updateProfile(
+                $business->id,
+                ['website' => 'javascript:alert(1)'],
+                $business->version,
+                ActorType::Operator,
+                7,
+            );
+            self::fail('a stored address may not carry a scheme a page would execute (APP-2.12)');
+        } catch (ValidationException $refusal) {
+            self::assertSame(['website'], array_keys($refusal->errors));
+        }
+
+        self::assertNull($this->scenario->storedColumn($business->id, 'website'), 'the refused value never reached the column');
+    }
+
+    #[Test]
+    public function a_stored_website_is_canonicalised_before_it_is_checked(): void
+    {
+        $business = $this->scenario->business();
+
+        $this->service()->updateProfile(
+            $business->id,
+            ['website' => '  HTTPS://Example.com/branches  '],
+            $business->version,
+            ActorType::Operator,
+            7,
+        );
+
+        self::assertSame('https://Example.com/branches', $this->scenario->storedColumn($business->id, 'website'));
+    }
+
+    #[Test]
+    public function a_social_link_that_is_not_http_or_https_is_refused(): void
+    {
+        $business = $this->scenario->business();
+
+        try {
+            $this->service()->updateProfile(
+                $business->id,
+                ['social_links' => ['facebook' => 'data:text/html;base64,PHNjcmlwdD4=']],
+                $business->version,
+                ActorType::Operator,
+                7,
+            );
+            self::fail('a stored social link may not carry a scheme a page would execute (APP-2.12)');
+        } catch (ValidationException $refusal) {
+            self::assertSame(['social_links'], array_keys($refusal->errors));
+        }
+
+        self::assertNull($this->scenario->storedColumn($business->id, 'social_links'));
+    }
+
+    #[Test]
+    public function valid_social_links_are_stored_as_a_map_and_read_back(): void
+    {
+        $business = $this->scenario->business();
+
+        $updated = $this->service()->updateProfile(
+            $business->id,
+            ['social_links' => ['facebook' => 'https://facebook.com/tsegaye']],
+            $business->version,
+            ActorType::Operator,
+            7,
+        );
+
+        self::assertSame(['facebook' => 'https://facebook.com/tsegaye'], $updated->socialLinks);
+    }
+
+    #[Test]
+    public function a_social_link_map_beyond_its_bound_is_refused(): void
+    {
+        $business = $this->scenario->business();
+        $links    = [];
+
+        foreach (range(1, 13) as $number) {
+            $links['platform-' . $number] = 'https://example.com/' . $number;
+        }
+
+        $this->expectException(ValidationException::class);
+
+        $this->service()->updateProfile($business->id, ['social_links' => $links], $business->version, ActorType::Operator, 7);
+    }
+
     private function service(): BusinessService
     {
         return new BusinessService(

@@ -8,6 +8,7 @@ use Bulbula\Backend\Database\Connection;
 use Bulbula\Backend\Domain\Directory\Branch;
 use Bulbula\Backend\Domain\Directory\Business;
 use Bulbula\Backend\Domain\Directory\Slug;
+use Bulbula\Backend\Domain\Directory\WebAddress;
 use Bulbula\Backend\Domain\Platform\ActorType;
 use Bulbula\Backend\Exceptions\ConcurrencyConflictException;
 use Bulbula\Backend\Exceptions\HttpNotFoundException;
@@ -46,6 +47,11 @@ use Throwable;
 final class BusinessService
 {
     /** The profile fields an operator may edit; anything else is ignored. */
+    /** How many social links one Business may record, and how long a platform name may be. */
+    private const MAX_SOCIAL_LINKS = 12;
+
+    private const MAX_SOCIAL_PLATFORM = 32;
+
     private const EDITABLE = [
         'name', 'legal_name', 'name_am', 'short_description',
         'long_description', 'website', 'email', 'social_links',
@@ -409,6 +415,12 @@ final class BusinessService
                 throw new ValidationException(['name' => 'A Business needs a name.']);
             }
 
+            if ($field === 'website' && $trimmed !== '') {
+                $normalised[$field] = (string) $this->webAddress($trimmed, 'website');
+
+                continue;
+            }
+
             $normalised[$field] = $trimmed === '' ? null : $trimmed;
         }
 
@@ -426,6 +438,12 @@ final class BusinessService
             throw new InvalidArgumentException('Social links are a map of platform to address.');
         }
 
+        if (count($value) > self::MAX_SOCIAL_LINKS) {
+            throw new ValidationException([
+                'social_links' => 'At most ' . self::MAX_SOCIAL_LINKS . ' social links are recorded.',
+            ]);
+        }
+
         $links = [];
 
         foreach ($value as $platform => $address) {
@@ -433,10 +451,36 @@ final class BusinessService
                 throw new InvalidArgumentException('Social links are a map of platform to address.');
             }
 
-            $links[$platform] = $address;
+            $platform = trim($platform);
+
+            if ($platform === '' || strlen($platform) > self::MAX_SOCIAL_PLATFORM) {
+                throw new ValidationException([
+                    'social_links' => 'A social platform name is 1 to ' . self::MAX_SOCIAL_PLATFORM . ' characters.',
+                ]);
+            }
+
+            $links[$platform] = (string) $this->webAddress($address, 'social_links');
         }
 
         return json_encode($links, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * A stored address must be `http` or `https` before it is ever an `href`
+     * (APP-2.11, APP-2.12). Escaping protects the attribute; only this
+     * protects the scheme.
+     *
+     * @throws ValidationException when the value is not an http(s) address
+     */
+    private function webAddress(string $value, string $field): WebAddress
+    {
+        try {
+            return WebAddress::fromString($value);
+        } catch (InvalidArgumentException $refusal) {
+            // The validator's message is safe to show; the offending value is
+            // not echoed back into it (APP-2.8).
+            throw new ValidationException([$field => $refusal->getMessage()]);
+        }
     }
 
     /**
