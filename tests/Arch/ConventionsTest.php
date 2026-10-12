@@ -151,6 +151,55 @@ final class ConventionsTest extends TestCase
         self::assertSame([], $offenders, 'A dotfile or a backup inside the document root is a disclosure.');
     }
 
+    #[Test]
+    public function the_repository_root_guard_denies_with_rewrite_rules_only(): void
+    {
+        $guard = (string) file_get_contents(SourceFiles::basePath() . '/.htaccess');
+        $rules = preg_replace('/^\s*#.*$/m', '', $guard) ?? '';
+
+        self::assertStringContainsString(
+            'RewriteRule',
+            $rules,
+            'The root guard protects the tree with rewrite rules.',
+        );
+
+        foreach (['Require', 'Deny', 'Order'] as $directive) {
+            self::assertStringNotContainsString(
+                $directive,
+                $rules,
+                'Rewrite rules only, never an authorization directive: LiteSpeed on the development host also applies the '
+                . '.htaccess of the document root\'s parent directories, so a Require/Deny line here is enforced against '
+                . 'the whole, correctly configured site — the 403-everywhere outage of 2026-10-11/13 (deployment.md §3.2).',
+            );
+        }
+    }
+
+    #[Test]
+    public function the_served_htaccess_pins_the_php_84_handler(): void
+    {
+        $htaccess = (string) file_get_contents(SourceFiles::basePath() . '/public/.htaccess');
+
+        self::assertStringContainsString(
+            'AddHandler application/x-httpd-ea-php84',
+            $htaccess,
+            'The account\'s public_html/.htaccess pins ea-php82 and a parent folder\'s handler is applied to every '
+            . 'directory below it, so without this block the site is served by PHP 8.2 and the entry point answers '
+            . '"Bulbula requires PHP 8.4 or newer." (deployment.md §3.1). On a host that is not cPanel/EA4, remove '
+            . 'the block and this test together.',
+        );
+    }
+
+    #[Test]
+    public function the_console_is_executable_in_the_repository(): void
+    {
+        self::assertTrue(
+            is_executable(SourceFiles::basePath() . '/bin/console'),
+            'bin/console carries a shebang and is an entry point (CR-6); it is run as ./bin/console. A workspace '
+            . 'restore has stripped this bit and swept it into a commit twice — repair with '
+            . '`git update-index --chmod=+x bin/console` and commit the mode on its own.',
+        );
+    }
+
     /**
      * @param list<array{0: int, 1: string, 2: int}|string> $tokens
      */

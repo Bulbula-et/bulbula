@@ -1,11 +1,43 @@
 # The repository root is NOT the web root — public/ is.
 #
-# This file exists for the case where that is configured wrongly: a
-# virtual-host pointed at the repository root, or a control panel that serves a
-# directory it should not. With it, a misconfigured site returns 403 for
-# everything instead of serving application code, configuration, migrations,
-# logs or uploads.
+# This file exists for one failure: a site configured to serve this directory
+# instead of public/. Every rule below fires only when the requested path
+# resolves to a real file or directory — which, under the correct document root
+# (public/), cannot happen for the names it protects. If this directory is ever
+# served by mistake, application source, configuration, migrations, logs and
+# uploads answer 403 instead of being handed out.
+#
+# REWRITE RULES ONLY. Never add an authorization directive (Require, Deny,
+# Order). Some servers — LiteSpeed, as on the development host — also apply the
+# .htaccess of the document root's PARENT directories. This directory is the
+# parent of public/, so a blanket deny here is enforced against the whole,
+# correctly configured site and denies every request before PHP is reached.
+# That was the 403-everywhere outage of 2026-10-11/13; deployment.md §3.2 has
+# the account. The rules below were proved against the live host on 2026-10-13.
 #
 # Do not edit this to "make the site work". Fix the docroot instead: it must be
 # the public/ directory.
-Require all denied
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Dotfiles and dot-directories (.env, .git, .github ...). `.well-known` is
+    # left alone: certificate validation reads it.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule "(^|/)\.(?!well-known)" - [F,L,NC]
+
+    # Backups, templates and manifests — the same list public/.htaccess refuses.
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule "\.(env|log|sql|bak|old|orig|sh|md|json|lock|ini|dist|ya?ml|xml)$" - [F,L,NC]
+
+    # The source tree and the tooling that live above public/.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule "^(backend|bin|config|docs|frontend|routes|storage|tests|vendor)(/|$)" - [F,L,NC]
+
+    # A directory index, for the case where this directory IS the document
+    # root: the source tree must never be listed as a directory either.
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteCond %{REQUEST_FILENAME} !/public/?$
+    RewriteRule ^$ - [F,L]
+</IfModule>

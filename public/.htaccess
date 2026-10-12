@@ -37,3 +37,18 @@
 
 Options -Indexes -MultiViews
 ServerSignature Off
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the "ea-php84" package as the default "PHP" programming language.
+#
+# Committed on 2026-10-13, deliberately. The account's public_html/.htaccess
+# pins ea-php82, and on this host a parent folder's handler is applied to every
+# directory below it — overriding the domain's choice in MultiPHP Manager.
+# With this block absent the application is served by PHP 8.2 and answers
+# "Bulbula requires PHP 8.4 or newer." (deployment.md §3.1; §16).
+# Deploying to a host that is not cPanel/EA4: delete the AddHandler line; the
+# IfModule wrapper makes it inert where mod_mime is absent either way.
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php84 .php .php8 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit
