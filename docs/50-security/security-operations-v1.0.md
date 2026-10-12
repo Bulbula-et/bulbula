@@ -145,7 +145,7 @@ over one that is ideal and performed never.
 | SO-7.3 | **No production personal data in any non-production environment** | SO-2.8, PRIV-1 |
 | SO-7.4 | Non-production environments **must not send real email to real addresses** | AS-4.1 |
 | SO-7.5 | Non-production environments are **not indexable** and are not publicly linked | PSE-2.5 |
-| SO-7.6 | The development host refreshes from `main` by cron every ten minutes; **migrations are deliberately excluded** | `deployment.md` §13, MG-3 |
+| SO-7.6 | The development host refreshes from `main` by cron every minute — anything edited on the server is reverted within the minute; **migrations are deliberately excluded** | `deployment.md` §7.1, §13, MG-3 |
 | SO-7.7 | A non-production environment that holds no personal data is **not** a residency concern; one that does, is | Art. 22 |
 
 ---

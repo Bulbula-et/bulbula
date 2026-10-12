@@ -90,7 +90,7 @@ bulbula.et/                      <- repository root, NOT web accessible
 ├── bin/ config/ database/ docs/ routes/ tests/ tools/ vendor/
 ├── storage/                     <- runtime state, NOT web accessible
 ├── composer.json composer.lock .env
-├── .htaccess                    <- denies everything if the docroot is wrong
+├── .htaccess                    <- rewrite-only guard for a wrong docroot (§3.2)
 └── public/                      <- document root
     ├── .htaccess
     ├── index.php                <- the only entry point
@@ -167,16 +167,75 @@ asked for — which is what the router matches on.
 > working tree deletes it, and every PHP URL then 500s under an older
 > interpreter — on this host the default shell interpreter is 8.2 (§2).
 >
-> **Status 2026-10-11 — settled on the live host.** The development host prints
-> `public/.htaccess` exactly as this repository ships it: **no cPanel-generated
-> handler block is written there at all.** On that host the interpreter is chosen
-> per domain in cPanel's MultiPHP Manager (`PHP 8.4` selected), not by a handler
-> in the file, so the reset in §7.1 cannot take PHP down with it and the
-> repository copy is authoritative as written. The interim
-> `git update-index --skip-worktree public/.htaccess` is therefore **withdrawn** —
-> it would hide exactly the updates this file is meant to receive. Should a host
-> ever grow such a block, capture it and commit it; the paragraph above remains
-> the rule for that case, and it is no longer listed as open.
+> **Status 2026-10-13 — corrected on the live host.** The block **is** required
+> and **is** committed. The account's `public_html/.htaccess` pins `ea-php82`,
+> and on this host a parent folder's handler is applied to every directory below
+> it, overriding the domain's MultiPHP choice: with the block absent the
+> application was served by PHP 8.2 and answered `500` with its own
+> `Bulbula requires PHP 8.4 or newer.`; with the block committed, every URL in
+> the smoke-test suite ran on `8.4.26`. The 2026-10-11 entry — "the host writes
+> no handler block, so the file is authoritative as written" — was wrong for the
+> same reason the root guard failed (§3.2): **it checked the file, not what the
+> server applies.** `--skip-worktree` stays withdrawn: the block receives
+> commits like the rest of the file. On a host that is not cPanel/EA4, delete
+> the block and its regression assertion together.
+
+### 3.2 The repository-root guard
+
+The root `.htaccess` is a **guard, not a second configuration file**. It holds
+**rewrite rules only**:
+
+```apache
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Dotfiles and dot-directories (.env, .git, .github ...); .well-known is exempt.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule "(^|/)\.(?!well-known)" - [F,L,NC]
+
+    # Backups, templates and manifests — the same list public/.htaccess refuses.
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule "\.(env|log|sql|bak|old|orig|sh|md|json|lock|ini|dist|ya?ml|xml)$" - [F,L,NC]
+
+    # The source tree and the tooling that live above public/.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule "^(backend|bin|config|docs|frontend|routes|storage|tests|vendor)(/|$)" - [F,L,NC]
+
+    # A directory index, for the case where this directory IS the document root.
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteCond %{REQUEST_FILENAME} !/public/?$
+    RewriteRule ^$ - [F,L]
+</IfModule>
+```
+
+Every rule is gated on the request resolving to a **real file or directory**, so
+under the correct document root (`public/`) none of them can fire — verified on
+the live host on 2026-10-13 against the whole smoke-test suite (§11).
+
+| ID | Rule |
+| --- | --- |
+| DR-6 | The root guard contains **rewrite rules only** — never `Require`, `Deny` or `Order`. A `tests/Arch` assertion holds the rule |
+| DR-7 | A change to either `.htaccess` reaches the site only through a commit — never by editing the server (§7.1) |
+
+**Why DR-6 exists — the 2026-10-11/13 outage, diagnosed live.** Some web
+servers apply the `.htaccess` files of the document root's **parent
+directories** as well as its own. **LiteSpeed on the development host does.**
+This directory is the parent of `public/`, so the guard's first version — a
+plain `Require all denied` — was enforced against the whole, correctly
+configured site: every URL (`/`, `/health`, paths that do not exist, static
+assets) died with `403` before PHP was reached, and the server log records
+`[ACL] Access to context [/] is denied!` for each request. It was proved by
+**in-place edit** on 2026-10-13: closing that one line brought the site back
+instantly, from the same server. The rewrite rules above then answered
+`200`/`404`/`403` exactly as intended on the same host.
+
+> **An authorization directive belongs in `public/.htaccess`, never above it.**
+> Inside the document root it protects the files people must not fetch; above
+> it, it denies the site itself. And an `.htaccess` test is only valid as an
+> **in-place edit** — LiteSpeed keeps serving a cached configuration for a file
+> that has been moved or deleted, so a test that moves the file away lies.
 
 ---
 
@@ -337,7 +396,9 @@ php bin/console migrate            # apply pending migrations
 
 ### 7.1 Development-host automation (existing)
 
-A cron job refreshes the development host from `main` every ten minutes:
+A cron job refreshes the development host from `main` **every minute**
+(`* * * * *`; read from the host's crontab on 2026-10-13 — an earlier revision
+of this line said ten):
 
 ```bash
 cd /home/arkeonet/public_html/bulbula.arkeonethiopia.com \
@@ -357,10 +418,17 @@ The repository root is exactly the directory in that command — **one copy
 only**. A second `git clone` *inside* it creates `bulbula/`: an unmanaged
 duplicate that is never served, never updated and holds a stale tree. Remove it.
 
-`git reset --hard` **discards anything edited directly on the server**,
-including files hand-created in the working tree that are now tracked (an
-improvised `public/.htaccess`, for example, is replaced by the committed
-one). This is the mechanical enforcement of DP-7.
+`git reset --hard` **discards anything edited directly on the server**, within a
+minute, including files hand-created in the working tree that are now tracked
+(an improvised `public/.htaccess`, for example, is replaced by the committed
+one). This is the mechanical enforcement of DP-7 — and DR-7.
+
+`public/.htaccess` is inside this, and that matters twice over: a PHP version
+chosen in cPanel's MultiPHP Manager is written into that file and reverted
+within the minute, which is why such a selection appeared never to stick. The
+committed handler block (§3.1) is the durable way to choose the interpreter for
+this site. **Edit the repository, push, and let this cron deploy; a change made
+on the server is a change that will disappear.**
 
 **Migrations are deliberately not part of this cron** (MG-3).
 
@@ -597,7 +665,7 @@ rm -f ZZZ-root.txt public/ZZZ-public.txt
 | Result | Meaning |
 | --- | --- |
 | `ZZZ-public.txt` → `200` | the document root **is** `public/` — go to 1 below |
-| `ZZZ-root.txt` → `200` | the document root is the **repository root**: the site is serving application source, and only the root `.htaccess` deny stands between it and the internet. Fix the vhost first (DR-3), then continue |
+| `ZZZ-root.txt` → `200` | the document root is the **repository root**: the site is serving application source, and only the root guard's rewrite rules (DR-6) stand between it and the internet. Fix the vhost first (DR-3), then continue |
 | both → `404` | the document root is **neither** — some other directory is being served. Fix that first; nothing below can be diagnosed until it is |
 
 `index.php` in the same loop is the check that needs no interpretation: **it is a
@@ -736,21 +804,30 @@ serving.
 
 ### Every URL answers 403, including `/` and including paths that do not exist
 
-Two causes produce this, and they are told apart in one command.
+Three causes produce this. The first command separates them.
 
-1. **The served directory is the repository root.** The root `.htaccess` refuses
-   everything on purpose (DR-1), so the guard is doing its job — the *document
+1. **The served directory is the repository root.** The root guard refuses the
+   source tree on purpose (DR-6), so the guard is doing its job — the *document
    root* is wrong, or a panel change to it has not reached the running vhost.
    Signal: the same `403` for a path that could not exist
    (`/nothing-here-at-all`), and the application's own answer absent.
 2. **A directory on the path is not traversable by the web server's user**
    (PM-9). Signal: everything is `403`, and `namei -l public/index.php` shows
    `---` on a level — the project root is often created `drwxr-x---`.
+3. **The host applies the `.htaccess` of the document root's parent
+   directories** (LiteSpeed does — the 2026-10-11/13 outage, §3.2), and the
+   root guard holds an authorization directive. Signal: the vhost names
+   `.../public`, the modes are fine, and the error log repeats
+   `[ACL] Access to context [/] is denied!`. Proved by **in-place edit only**:
+   comment the directive out and re-request — a moved or deleted `.htaccess`
+   keeps its cached configuration on LiteSpeed, so that test lies.
 
 ```bash
 cd <domain directory>
 namei -l public/index.php                      # the mode of every level
 ls -ld . public public/assets                  # the ones that matter most
+grep -n 'Require\|Deny\|Order' .htaccess       # any hit outside a comment is cause 3 (§3.2, DR-6)
+grep -i 'ACL.*denied' /usr/local/apache/logs/error_log | tail -3
 curl -sk -o /dev/null -w '%{http_code}\n' --resolve <host>:443:127.0.0.1 https://<host>/nothing-here-at-all
 ```
 
@@ -758,6 +835,8 @@ If (1): correct the document root and, when a panel was changed and nothing
 followed, re-save it (set it away and back) to force the vhost to be rebuilt.
 If (2): `chmod 755` the directories in the chain, `644` the files, `600` `.env`,
 `755` `bin/console` (PM-10) — never `777`.
+If (3): restore the guard this repository ships (DR-6) — never
+`Require all denied`.
 
 ### The home page 500s but `/health` works
 
@@ -819,7 +898,8 @@ broken part — this is the split working as designed.
 | L-21 | Retention of backups and logs | **PENDING COUNSEL** |
 | TRD OT-03 | Filesystem versus database cache backend | Open — affects `storage/cache/` |
 | — | Production host, domain and provisioning date | Not yet decided |
-| ~~cPanel PHP handler block in `public/.htaccess`~~ | **Closed 2026-10-11** — the live host writes none; the version in this repository is authoritative (§3.1) |
+| cPanel PHP handler block in `public/.htaccess` | **Reopened and settled 2026-10-13 — the block is required and is committed.** The account's `public_html/.htaccess` pins `ea-php82` and is applied to every directory below it; without the block the site is served by PHP 8.2 (§3.1) |
+| Root guard directive in a parent-directory-aware server | **Settled 2026-10-13.** LiteSpeed applies the parent directories' `.htaccess`; the root guard is rewrite-only (DR-6, §3.2), with a `tests/Arch` assertion holding it |
 | — | Cloudflare proxying and data residency (L-2, X-01) | **PENDING COUNSEL** — the proxy is live on the development host; the residency question belongs to the owner and counsel, not to this document |
 
 ---

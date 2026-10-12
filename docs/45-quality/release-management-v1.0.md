@@ -69,7 +69,7 @@ feature branch → pull request → CI gate → review → merge to main
 | REL-2.1 | **Work happens on a branch. Never directly on `main`** | Owner instruction |
 | REL-2.2 | **Every change reaches `main` through a pull request** | Owner instruction |
 | REL-2.3 | **Commits are logically structured**, so history is readable and a rollback target is identifiable | Owner instruction |
-| REL-2.4 | **The development host refreshes from `main` automatically every ten minutes and `git reset --hard`s**, which is the mechanical enforcement of DP-7 | `deployment.md` §7.1 |
+| REL-2.4 | **The development host refreshes from `main` automatically every minute and `git reset --hard`s** — a change made on the server disappears within the minute —, which is the mechanical enforcement of DP-7 | `deployment.md` §7.1 |
 | REL-2.5 | **Migrations are deliberately not part of that cron** | MG-3, DA-1 |
 | REL-2.6 | **Production must not auto-deploy from a branch** | DA-1, DS-3 |
 | REL-2.7 | **A branch that cannot be merged cleanly is rebased or remade**, not forced |

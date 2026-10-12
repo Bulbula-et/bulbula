@@ -543,10 +543,13 @@ Only `public/` is web accessible. `backend/`, `frontend/`, `api/`, `admin/`,
 asserts that the document root holds a single executable entry point.
 
 Two `.htaccess` files assume the docroot will one day be misconfigured: the
-repository root denies everything, and `storage/` denies everything. A site
-pointed at the repository root returns 403 for its whole tree instead of
-serving configuration, migrations or uploads. **Do not edit either file to
-"make the site work" — fix the docroot instead.**
+repository root refuses the source tree — **rewrite rules only**, because some
+servers apply the document root's parent-directory `.htaccess` as well, and an
+authorization directive there is enforced against the correctly configured site
+(`deployment.md` §3.2, DR-6) — and `storage/` denies everything. A site pointed
+at the repository root returns 403 for its whole tree instead of serving
+configuration, migrations or uploads. **Do not edit either file to "make the
+site work" — fix the docroot instead.**
 Uploaded media is stored outside the document root and served through an
 adapter or an explicit endpoint. Deployment details are in
 [deployment.md](deployment.md).

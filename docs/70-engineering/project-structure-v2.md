@@ -25,7 +25,7 @@ you are looking at and who may call it.
 bulbula/
 ├── public/                     ← the ONLY web-reachable directory
 │   ├── index.php               single entry point for every HTTP request
-│   ├── .htaccess               rewrite + security headers + deny-list
+│   ├── .htaccess               rewrite + security headers + deny-list + PHP handler pin
 │   └── assets/{css,img,js}/    static files, served directly by the web server
 │
 ├── frontend/                   Bulbula\Frontend\  — pages for people
@@ -641,6 +641,23 @@ read) can look like a configuration change that does nothing. `Env` now records
 whether it found the file, `Application::boot()` warns in the log, and
 `bin/console` says it on the terminal where an operator is standing — with a test
 that pins the rule that the example is never read as settings.
+
+**Correction, 2026-10-13 — the two one-line files, and what the host actually
+applies.** The addendum above says the live host writes **no** handler block
+into `public/.htaccess`. The live host does apply one: the account's
+`public_html/.htaccess` pins `ea-php82` for every directory beneath it, and the
+served file must name `ea-php84` to win — it now does, committed, with the
+account in `deployment.md` §3.1. The same diagnosis found the mirror-image
+fault: the repository-root guard's `Require all denied` was enforced against
+the whole, correctly configured site, because LiteSpeed also applies the
+`.htaccess` of the document root's **parent** directories and this repository
+root is the parent of `public/`. The guard is now rewrite-only, every rule
+gated on the request resolving to a real file or directory
+(`deployment.md` §3.2, DR-6). Both faults lived in one-line files and both were
+settled by **editing on the server and watching the answer change** — not by
+reading the file and reasoning about it. That is the method this pass adds to
+the record: a configuration belief is verified by an in-place edit plus a
+request, and the deployment cron (§7.1) means the durable edit is a commit.
 
 ---
 
