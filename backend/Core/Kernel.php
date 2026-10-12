@@ -12,8 +12,9 @@ use Closure;
 use Throwable;
 
 /**
- * Request in, response out. The kernel owns four things and nothing else:
- * correlation ids, routing, error rendering, and calling the handler.
+ * Request in, response out. The kernel owns five things and nothing else:
+ * correlation ids, routing, error rendering, calling the handler, and the
+ * caching floor every response passes through on its way out.
  */
 final class Kernel
 {
@@ -40,7 +41,9 @@ final class Kernel
             $response = $this->errors->render($error, 500, $request->wantsJson(), $requestId);
         }
 
-        return $response->withHeader('X-Request-Id', $requestId);
+        // Every response leaves with a caching policy of its own, so that the
+        // host's default is never the one that decides (CachePolicy).
+        return CachePolicy::apply($response)->withHeader('X-Request-Id', $requestId);
     }
 
     private function route(Request $request): Response

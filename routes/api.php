@@ -28,6 +28,7 @@ return static function (Router $router): void {
     $businesses = 'Bulbula\Api\Controllers\V1\BusinessController';
 
     $router->get('/api/v1/businesses/{slug:' . Slug::ROUTE_PATTERN . '}', [$businesses, 'show']);
+    $router->get('/api/v1/businesses/{slug:' . Slug::ROUTE_PATTERN . '}/branches', [$businesses, 'branches']);
 
     // The operational probes — /api/v1/health and /api/v1/health/ready — are
     // declared in routes/health.php as their own family: no session, no rate

@@ -866,6 +866,28 @@ response body names the failing check (`"database":"error"`), the application
 itself is fine, and liveness still answers `200` because the process is not the
 broken part — this is the split working as designed.
 
+### Every page arrives with a month-long public cache header
+
+The header is not the application's. A web server fills a response's silence:
+where PHP sends no `Cache-Control`, LiteSpeed on the development host sends
+`cache-control: public, max-age=2592000` with a matching `Expires` — on HTML
+pages, on error pages, on everything it is not told about. It was found on
+`/sign-in`, which hands out a CSRF token and was therefore advertised as
+publicly cacheable for thirty days (`performance-and-caching.md` §6.1, HC-7).
+
+The fix belongs to the application, not to the host's configuration and not to
+`.htaccess`: every response the application generates states its own policy,
+and a response that states none is `no-store` (`backend/Core/CachePolicy.php`,
+applied in `Kernel::handle`). A host default cannot appear where a policy
+already exists. Verified on the host, 2026-10-13: `/`, `/sign-in`, a `/b/…`
+miss and the API's miss all answer `no-store`; `/health` and `/api/v1/health`
+keep their own `no-store`; static CSS keeps its one-year expiry from
+`public/.htaccess`.
+
+A host-level default is the wrong place to fix this: it cannot be committed,
+it is invisible to the test suite, and the next host would have its own. A page
+that should be cacheable opts in where it is generated, with its `ETag`.
+
 ---
 
 ## 17. Not in V1

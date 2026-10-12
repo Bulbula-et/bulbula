@@ -258,7 +258,8 @@ public/index.php
         ├─ correlation id    generated per request, returned as X-Request-Id
         ├─ Router::match()   FastRoute: found | 405 (Allow header) | 404
         ├─ handler           controller built by its factory, or a closure
-        └─ errors            HttpException and anything else → ErrorRenderer
+        ├─ errors            HttpException and anything else → ErrorRenderer
+        └─ cache policy      a response that states none leaves as no-store (HC-7)
   └─ Response::send()                   status line, headers, body
 ```
 

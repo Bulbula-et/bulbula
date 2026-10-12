@@ -142,6 +142,7 @@ used in a join.
 | **Any authenticated response** | **`no-store`** | None |
 | Staff console, `/api/v1/ops/*` | **`no-store`** | None |
 | Health endpoints | `no-store` | None (existing behaviour) |
+| **Any other response — the floor** | **`no-store`** | None |
 
 | ID | Rule |
 | --- | --- |
@@ -151,6 +152,7 @@ used in a join.
 | HC-4 | `ETag` is derived from content, so a rebuild that changes nothing does not invalidate caches |
 | HC-5 | Freshness windows are **configuration**, not literals (TRD TR-196) |
 | HC-6 | A page whose data just changed **MUST NOT** serve stale content to the staff member who changed it (§8) |
+| HC-7 | **The application states the caching policy on every response it generates.** A response that states none is `no-store`; the web server's default is never the decider. Proven on the development host, 2026-10-13: LiteSpeed answers `public, max-age=2592000` for a response that states nothing, which reached the sign-in page and its CSRF token (`deployment.md` §16, `backend/Core/CachePolicy.php`) |
 
 ### 6.2 Why this layer first
 
