@@ -44,20 +44,25 @@ final class SessionRepository
         ?string $network,
         string $csrfHash,
     ): Session {
+        // One stamp, two slots: PDO_MySQL binds a name once per statement.
+        $stamp = DatabaseTime::format($now);
+
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE
             . ' (principal_type, principal_id, token_hash, surface, created_at, last_active_at, expires_at,'
             . ' revoked_at, user_agent, network_marker, csrf_hash)'
-            . ' VALUES (:type, :principal, :token_hash, :surface, :now, :now, :expires_at, NULL, :agent, :network, :csrf)',
+            . ' VALUES (:type, :principal, :token_hash, :surface, :created_at, :last_active_at,'
+            . ' :expires_at, NULL, :agent, :network, :csrf)',
         );
 
         $statement->execute([
-            'type'        => $principalType->value,
-            'principal'   => $principalId,
-            'token_hash'  => $tokenHash,
-            'surface'     => $surface->value,
-            'now'         => DatabaseTime::format($now),
-            'expires_at'  => DatabaseTime::format($expiresAt),
+            'type'           => $principalType->value,
+            'principal'      => $principalId,
+            'token_hash'     => $tokenHash,
+            'surface'        => $surface->value,
+            'created_at'     => $stamp,
+            'last_active_at' => $stamp,
+            'expires_at'     => DatabaseTime::format($expiresAt),
             'agent'       => $userAgent,
             'network'     => $network,
             'csrf'        => $csrfHash,

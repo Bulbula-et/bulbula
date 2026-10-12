@@ -103,6 +103,30 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 .5rem; }
 }
 .notice--info { border-left-color: var(--accent); }
 
+/* Breadcrumb -------------------------------------------------------------- */
+.breadcrumb { padding-top: 1.25rem; font-size: .92rem; color: var(--ink-soft); }
+.breadcrumb__list { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; margin: 0; padding: 0; }
+.breadcrumb__list li + li::before { content: "\203A"; margin-right: .35rem; color: var(--ink-soft); }
+.breadcrumb__list [aria-current] { color: var(--ink); }
+
+/* Business profile -------------------------------------------------------- */
+.listing__header { margin-bottom: .5rem; }
+.listing__title { font-size: clamp(1.6rem, 4.5vw, 2.4rem); }
+.listing__name-am { color: var(--ink-soft); margin: -.25rem 0 .75rem; }
+.listing__meta { color: var(--ink-soft); margin: 0 0 1rem; }
+.listing__hours { white-space: nowrap; }
+.listing__block { margin-top: 2rem; }
+
+.branch { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1rem; }
+.branch__title { font-size: 1.05rem; }
+.branch__state { margin: 0 0 .5rem; color: var(--accent-ink); }
+.branch__address { margin: 0 0 .5rem; }
+.branch__map { margin: 0; }
+
+.contact { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; justify-items: start; }
+
+.notice--warning { border-left-color: #b42318; background: #fdf3f2; }
+
 /* Footer ------------------------------------------------------------------ */
 .site-footer {
     margin-top: 3rem; border-top: 1px solid var(--line);

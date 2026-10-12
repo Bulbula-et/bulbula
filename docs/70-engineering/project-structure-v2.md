@@ -661,6 +661,76 @@ request, and the deployment cron (§7.1) means the durable edit is a commit.
 
 ---
 
+**Addendum, 2026-10-13 — Business and listing: the domain, the gate, the URL
+grammar (build order §9 step 3).** The slice's foundation landed with its
+tests, on the branch `directory/business-listing`:
+
+- **Schema** — eight migrations on 2026-10-13: `sub_cities`, `areas`,
+  `categories` (one self-referencing table, exactly two levels — D-06),
+  `businesses`, `business_categories` (`is_primary`; `UNIQUE (business_id,
+  category_id)` — D-57), `branches`, `permission_records`, `redirects`.
+- **Domain** — `Domain/Directory/` (`Slug`, `BusinessState`, `BranchState`,
+  `Business`, `Branch`, `Category`, `Area`, `SubCity`) and
+  `Domain/Operations/` (`PermissionMethod`, `PermissionState`,
+  `PermissionRecord`). `Slug` is the URL grammar in one class: lowercase,
+  hyphenated, 1–80 characters; a display name that folds to nothing (an
+  Amharic-only name today) is refused rather than guessed, so Amharic URLs
+  later arrive by widening one class and one route constraint (IAR-6).
+- **Repositories** — `Repositories/Directory/` owns the Business, Branch,
+  Category, Area and Sub-city tables; `Repositories/Operations/` owns the
+  permission records; `Repositories/Platform/RedirectRepository.php` owns the
+  redirects (TR-16 — table ownership per area).
+- **The publication gate** — `Services/Directory/PublicationGate.php` answers
+  *what is missing* for the model's required set plus the permission record,
+  and `PublishListingService` refuses through it **before any state changes**:
+  no publication without a linked Permission record, from every path (TR-49),
+  with the change and its audit entry in one transaction (TR-08). The gate
+  reads the **most recent** permission record, so a withdrawal stops
+  publication (PRD TS-5) and a fresh grant restores it.
+- **The write side** — `BusinessService`: creation with duplicate candidates
+  **surfaced, not refused** (exact normalised name, public email or branch
+  phone — TR-55); versioned edits that refuse a stale token (TR-57); slug
+  changes that record the redirect in the same transaction (IAR-3); the first
+  Branch is the primary one (D-03); classification that demotes the previous
+  primary (D-57); closure as a state with a reason, never a delete (TR-53);
+  every change audited as `listing.*`.
+- **Tests** — 221 → **253** (5,633 → 7,381 assertions). `DirectoryScenario`
+  seeds through the repositories, so no test asserts against a schema the
+  application cannot write.
+
+Deliberately deferred, each with its reason: the **Landmark** entity (§3.7 —
+its own migration when the profile page needs it, rather than a branch text
+column that would be a different design); the **rating summary** columns with
+their writer (TR-62/63 arrive with Reviews); **Aliases** (Search slice);
+**opening hours** (D-04 open); **media** attachments (media slice);
+**verification records** (the gate needs permission, not verification, and
+verification state is derived — §4.2).
+
+One open reading is recorded rather than invented: **D-57 does not distinguish
+taxonomy levels** ("exactly one primary Category"), so any Category may be
+primary or secondary; and the duplicate signal deliberately excludes
+area-alone, which every business in an area shares.
+
+**Update, 2026-10-13 — the read path landed, and the slice is complete.**
+`/b/{business}` serves the profile (a moved slug answers 301 to where the
+redirect table says it went — IAR-3; everything not published answers the same
+404); `GET /api/v1/businesses/{slug}` serves the same record to machines under
+the api-spec §2.3 rules (PR-1…PR-6), with a content-derived `ETag` and public
+cache headers (§1.8). `PublicListingService` is the one object that decides
+what a stranger may see; both surfaces render it and neither queries.
+
+Two defects that the SQLite-only suite **could not show** were found by running
+the write path and the read path against a real MariaDB before the merge:
+every INSERT and UPDATE bound `:now` twice, which MySQL's native prepares
+refuse with `HY093`, and the duplicate-detection query did the same with
+`:phone`. Both are fixed — one stamp, two parameters — and
+`tests/Arch/BoundariesTest` now refuses a named parameter bound twice anywhere
+under `backend/`, so the class of defect cannot return. Worth remembering when
+reading the test-strategy table: the suite is a filter, not a proof, for engine
+differences.
+
+---
+
 *Companion records: `php-application-structure-v1.0.md` (superseded; its feature
 inventory, routes, migration plan and build order remain the source for content),
 `findings-v1.0.md` (document defects found while reading the specification set),

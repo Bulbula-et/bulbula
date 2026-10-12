@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Bulbula\Backend\Core;
 
 use Bulbula\Api\Controllers\V1\AuthController;
+use Bulbula\Api\Controllers\V1\BusinessController;
 use Bulbula\Api\Controllers\V1\HealthController;
 use Bulbula\Backend\Console\Command;
 use Bulbula\Backend\Console\CommandRunner;
@@ -22,12 +23,19 @@ use Bulbula\Backend\Integrations\Google\GoogleKeySet;
 use Bulbula\Backend\Integrations\Google\GoogleTokenVerifier;
 use Bulbula\Backend\Integrations\Google\StreamJsonFetcher;
 use Bulbula\Backend\Mail\LocalFileMailer;
+use Bulbula\Backend\Repositories\Directory\AreaRepository;
+use Bulbula\Backend\Repositories\Directory\BranchRepository;
+use Bulbula\Backend\Repositories\Directory\BusinessRepository;
+use Bulbula\Backend\Repositories\Directory\CategoryRepository;
+use Bulbula\Backend\Repositories\Directory\SubCityRepository;
 use Bulbula\Backend\Repositories\Identity\CustomerRepository;
 use Bulbula\Backend\Repositories\Identity\OtpRequestRepository;
 use Bulbula\Backend\Repositories\Identity\SessionRepository;
 use Bulbula\Backend\Repositories\Platform\RateLimitRepository;
+use Bulbula\Backend\Repositories\Platform\RedirectRepository;
 use Bulbula\Backend\Security\Csrf;
 use Bulbula\Backend\Security\RateLimiter;
+use Bulbula\Backend\Services\Directory\PublicListingService;
 use Bulbula\Backend\Services\Identity\GoogleSignInService;
 use Bulbula\Backend\Services\Identity\MailOtpSender;
 use Bulbula\Backend\Services\Identity\OtpSender;
@@ -39,6 +47,7 @@ use Bulbula\Backend\Support\Health\HealthChecker;
 use Bulbula\Backend\Support\LoggerFactory;
 use Bulbula\Backend\Support\SystemClock;
 use Bulbula\Frontend\Controllers\HomeController;
+use Bulbula\Frontend\Controllers\ListingController;
 use Bulbula\Frontend\Controllers\SearchController;
 use Bulbula\Frontend\Controllers\SignInController;
 use ErrorException;
@@ -253,7 +262,7 @@ final class Application
         Env::load($this->basePath);
 
         $config = new Config($this->basePath);
-        $config->load('app', 'database', 'security', 'mail', 'google', 'logging');
+        $config->load('app', 'database', 'security', 'mail', 'google', 'logging', 'cache');
         $this->config = $config;
 
         $debug = $config->bool('app.debug');
@@ -293,6 +302,18 @@ final class Application
         );
 
         $this->logger = LoggerFactory::create($config, $this->basePath);
+
+        // Directory reading: what a public page may show about a Business, and
+        // where an address that moved now points (PR-1…PR-6, IAR-3). A surface
+        // asks this; it never opens a connection of its own.
+        $directory = new PublicListingService(
+            new BusinessRepository($connection),
+            new CategoryRepository($connection),
+            new BranchRepository($connection),
+            new AreaRepository($connection),
+            new SubCityRepository($connection),
+            new RedirectRepository($connection),
+        );
 
         // Identity: sessions, sign-in codes and the limits on them. The sender
         // is the placeholder that refuses (OTP-10) until Backend\Integrations
@@ -358,6 +379,10 @@ final class Application
             new ControllerFactory([
                 HomeController::class     => static fn (): HomeController => new HomeController($view),
                 SearchController::class   => static fn (): SearchController => new SearchController($view),
+                ListingController::class  => static fn (): ListingController => new ListingController(
+                    $view,
+                    $directory,
+                ),
                 HealthController::class   => static fn (): HealthController => new HealthController($health),
                 SignInController::class   => fn (): SignInController => new SignInController(
                     $view,
@@ -367,6 +392,10 @@ final class Application
                     $this->otpVerifications(),
                     $this->sessions(),
                     $this->googleSignIn(),
+                ),
+                BusinessController::class => static fn (): BusinessController => new BusinessController(
+                    $directory,
+                    $config,
                 ),
                 AuthController::class     => fn (): AuthController => new AuthController(
                     $this->otpRequests(),

@@ -62,16 +62,21 @@ final class CustomerRepository
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::TABLE
             . ' (public_ref, email, email_verified_at, display_name, state, created_at, updated_at, last_seen_at)'
-            . ' VALUES (:ref, :email, :verified_at, :display_name, :state, :now, :now, :now)',
+            . ' VALUES (:ref, :email, :verified_at, :display_name, :state, :created_at, :updated_at, :last_seen_at)',
         );
+
+        // One stamp, three slots: PDO_MySQL binds a name once per statement.
+        $stamp = DatabaseTime::format($now);
 
         $statement->execute([
             'ref'          => $this->newPublicRef(),
             'email'        => $email->value,
-            'verified_at'  => DatabaseTime::format($now),
+            'verified_at'  => $stamp,
             'display_name' => $displayName,
             'state'        => CustomerState::Active->value,
-            'now'          => DatabaseTime::format($now),
+            'created_at'   => $stamp,
+            'updated_at'   => $stamp,
+            'last_seen_at' => $stamp,
         ]);
 
         $id = (int) $this->connection->pdo()->lastInsertId();
@@ -102,15 +107,18 @@ final class CustomerRepository
         $statement = $this->connection->pdo()->prepare(
             'INSERT INTO ' . self::IDENTITIES
             . ' (customer_id, provider, subject, email_at_provider, linked_at, last_used_at)'
-            . ' VALUES (:customer_id, :provider, :subject, :email, :now, :now)',
+            . ' VALUES (:customer_id, :provider, :subject, :email, :linked_at, :last_used_at)',
         );
 
+        $stamp = DatabaseTime::format($now);
+
         $statement->execute([
-            'customer_id' => $customerId,
-            'provider'    => $provider,
-            'subject'     => $subject,
-            'email'       => $emailAtProvider->value,
-            'now'         => DatabaseTime::format($now),
+            'customer_id'  => $customerId,
+            'provider'     => $provider,
+            'subject'      => $subject,
+            'email'        => $emailAtProvider->value,
+            'linked_at'    => $stamp,
+            'last_used_at' => $stamp,
         ]);
     }
 
