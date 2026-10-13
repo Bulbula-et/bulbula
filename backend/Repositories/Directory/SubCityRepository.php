@@ -33,6 +33,18 @@ final class SubCityRepository
         return is_array($row) ? $this->hydrate($row) : null;
     }
 
+    public function findBySlug(Slug $slug): ?SubCity
+    {
+        $statement = $this->connection->pdo()->prepare(
+            'SELECT * FROM ' . self::TABLE . ' WHERE slug = :slug ORDER BY id ASC LIMIT 1',
+        );
+        $statement->execute(['slug' => $slug->value]);
+
+        $row = $statement->fetch();
+
+        return is_array($row) ? $this->hydrate($row) : null;
+    }
+
     /**
      * The SubCitys with those ids, keyed by id — one query for a whole page's
      * worth of rows rather than one query per row (DB-10).

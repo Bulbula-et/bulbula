@@ -369,6 +369,7 @@ final class BusinessServiceTest extends DatabaseTestCase
             $this->scenario->subCities,
             $this->scenario->redirects,
             new AuditRecorder(new AuditEntryRepository($this->database()), $this->clock),
+            $this->scenario->indexer(),
             $this->database(),
             $this->clock,
         );

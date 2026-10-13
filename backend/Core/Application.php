@@ -11,7 +11,10 @@ use Bulbula\Backend\Console\Command;
 use Bulbula\Backend\Console\CommandRunner;
 use Bulbula\Backend\Console\Commands\MigrateCommand;
 use Bulbula\Backend\Console\Commands\MigrationStatusCommand;
+use Bulbula\Backend\Console\Commands\ReferenceImportCommand;
 use Bulbula\Backend\Console\Commands\RollbackCommand;
+use Bulbula\Backend\Console\Commands\SearchReindexCommand;
+use Bulbula\Backend\Console\Commands\SearchReindexDriftCommand;
 use Bulbula\Backend\Console\Output;
 use Bulbula\Backend\Console\StreamOutput;
 use Bulbula\Backend\Database\Connection;
@@ -23,6 +26,7 @@ use Bulbula\Backend\Integrations\Google\GoogleKeySet;
 use Bulbula\Backend\Integrations\Google\GoogleTokenVerifier;
 use Bulbula\Backend\Integrations\Google\StreamJsonFetcher;
 use Bulbula\Backend\Mail\LocalFileMailer;
+use Bulbula\Backend\Repositories\Directory\AliasRepository;
 use Bulbula\Backend\Repositories\Directory\AreaRepository;
 use Bulbula\Backend\Repositories\Directory\BranchRepository;
 use Bulbula\Backend\Repositories\Directory\BusinessRepository;
@@ -33,6 +37,7 @@ use Bulbula\Backend\Repositories\Identity\OtpRequestRepository;
 use Bulbula\Backend\Repositories\Identity\SessionRepository;
 use Bulbula\Backend\Repositories\Platform\RateLimitRepository;
 use Bulbula\Backend\Repositories\Platform\RedirectRepository;
+use Bulbula\Backend\Repositories\Search\SearchDocumentRepository;
 use Bulbula\Backend\Security\Csrf;
 use Bulbula\Backend\Security\RateLimiter;
 use Bulbula\Backend\Services\Directory\PublicListingService;
@@ -43,6 +48,10 @@ use Bulbula\Backend\Services\Identity\RequestOtpService;
 use Bulbula\Backend\Services\Identity\SessionService;
 use Bulbula\Backend\Services\Identity\UndeliverableOtpSender;
 use Bulbula\Backend\Services\Identity\VerifyOtpService;
+use Bulbula\Backend\Services\Search\SearchDocumentBuilder;
+use Bulbula\Backend\Services\Search\SearchIndexer;
+use Bulbula\Backend\Services\Search\TextNormaliser;
+use Bulbula\Backend\Support\Clock;
 use Bulbula\Backend\Support\Health\HealthChecker;
 use Bulbula\Backend\Support\LoggerFactory;
 use Bulbula\Backend\Support\SystemClock;
@@ -78,6 +87,14 @@ final class Application
     private ?SessionService $sessions = null;
 
     private ?RequestOtpService $otpRequests = null;
+
+    private ?Connection $connection = null;
+
+    private ?SearchIndexer $searchIndexer = null;
+
+    private ?TextNormaliser $searchNormaliser = null;
+
+    private ?Clock $clock = null;
 
     private ?VerifyOtpService $otpVerifications = null;
 
@@ -167,11 +184,27 @@ final class Application
      */
     private function buildConsole(Output $output): CommandRunner
     {
+        $searchIndexer = $this->searchIndexer ?? throw new ConfigurationException('The application has not booted.');
+        $searchNormaliser = $this->searchNormaliser ?? throw new ConfigurationException('The application has not booted.');
+        $connection = $this->connection ?? throw new ConfigurationException('The application has not booted.');
+        $clock = $this->clock ?? throw new ConfigurationException('The application has not booted.');
+
         // One line per command, by hand — the same rule as controllers.
         $factories = [
-            'migrate'          => fn (): Command => new MigrateCommand($this->migrator(), $output),
-            'migration:status' => fn (): Command => new MigrationStatusCommand($this->migrator(), $output),
-            'rollback'         => fn (): Command => new RollbackCommand($this->migrator(), $output),
+            'migrate'              => fn (): Command => new MigrateCommand($this->migrator(), $output),
+            'migration:status'     => fn (): Command => new MigrationStatusCommand($this->migrator(), $output),
+            'rollback'             => fn (): Command => new RollbackCommand($this->migrator(), $output),
+            'reference:import'     => fn (): Command => new ReferenceImportCommand(
+                new SubCityRepository($connection),
+                new AreaRepository($connection),
+                new CategoryRepository($connection),
+                new AliasRepository($connection),
+                $searchNormaliser,
+                $clock,
+                $output,
+            ),
+            'search:reindex'       => fn (): Command => new SearchReindexCommand($searchIndexer, $output),
+            'search:reindex:drift' => fn (): Command => new SearchReindexDriftCommand($searchIndexer, $output),
         ];
 
         $registered = $this->registeredCommands();
@@ -262,7 +295,7 @@ final class Application
         Env::load($this->basePath);
 
         $config = new Config($this->basePath);
-        $config->load('app', 'database', 'security', 'mail', 'google', 'logging', 'cache');
+        $config->load('app', 'database', 'security', 'mail', 'google', 'logging', 'cache', 'search');
         $this->config = $config;
 
         $debug = $config->bool('app.debug');
@@ -287,10 +320,12 @@ final class Application
         $errors = new ErrorRenderer($debug);
 
         $clock = new SystemClock();
+        $this->clock = $clock;
 
         // Lazy internally: no connection is opened until a query needs one,
         // which is what lets readiness report an outage instead of dying in it.
         $connection = new Connection($config);
+        $this->connection = $connection;
 
         $health = new HealthChecker($connection, $this->basePath . '/storage/logs');
 
@@ -313,6 +348,33 @@ final class Application
             new AreaRepository($connection),
             new SubCityRepository($connection),
             new RedirectRepository($connection),
+        );
+
+        // Search: one shared normaliser for indexing, querying and suggestion
+        // (N-8), and the derived document's maintenance (SD-1…SD-7). The
+        // write services call the indexer in their own transactions (SD-2).
+        $stopwords = [];
+
+        foreach ((array) $config->get('search.stopwords', []) as $stopword) {
+            if (is_string($stopword)) {
+                $stopwords[] = $stopword;
+            }
+        }
+
+        $this->searchNormaliser = new TextNormaliser(
+            $config->int('search.min_token_length', 2),
+            $stopwords,
+        );
+
+        $this->searchIndexer = new SearchIndexer(
+            new BusinessRepository($connection),
+            new CategoryRepository($connection),
+            new BranchRepository($connection),
+            new AreaRepository($connection),
+            new SubCityRepository($connection),
+            new AliasRepository($connection),
+            new SearchDocumentBuilder($this->searchNormaliser),
+            new SearchDocumentRepository($connection),
         );
 
         // Identity: sessions, sign-in codes and the limits on them. The sender

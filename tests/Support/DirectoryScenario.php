@@ -15,6 +15,7 @@ use Bulbula\Backend\Domain\Directory\SubCity;
 use Bulbula\Backend\Domain\Operations\PermissionMethod;
 use Bulbula\Backend\Domain\Operations\PermissionRecord;
 use Bulbula\Backend\Domain\Platform\ActorType;
+use Bulbula\Backend\Repositories\Directory\AliasRepository;
 use Bulbula\Backend\Repositories\Directory\AreaRepository;
 use Bulbula\Backend\Repositories\Directory\BranchRepository;
 use Bulbula\Backend\Repositories\Directory\BusinessRepository;
@@ -23,9 +24,13 @@ use Bulbula\Backend\Repositories\Directory\SubCityRepository;
 use Bulbula\Backend\Repositories\Operations\PermissionRecordRepository;
 use Bulbula\Backend\Repositories\Platform\AuditEntryRepository;
 use Bulbula\Backend\Repositories\Platform\RedirectRepository;
+use Bulbula\Backend\Repositories\Search\SearchDocumentRepository;
 use Bulbula\Backend\Services\Directory\PublicationGate;
 use Bulbula\Backend\Services\Directory\PublishListingService;
 use Bulbula\Backend\Services\Platform\AuditRecorder;
+use Bulbula\Backend\Services\Search\SearchDocumentBuilder;
+use Bulbula\Backend\Services\Search\SearchIndexer;
+use Bulbula\Backend\Services\Search\TextNormaliser;
 use Bulbula\Backend\Support\Clock;
 use Psr\Log\NullLogger;
 
@@ -55,6 +60,8 @@ final class DirectoryScenario
 
     public readonly RedirectRepository $redirects;
 
+    public readonly AliasRepository $aliases;
+
     private ?SubCity $subCity = null;
 
     private ?Area $area = null;
@@ -72,6 +79,22 @@ final class DirectoryScenario
         $this->subCities = new SubCityRepository($connection);
         $this->permissions = new PermissionRecordRepository($connection);
         $this->redirects = new RedirectRepository($connection);
+        $this->aliases = new AliasRepository($connection);
+    }
+
+    /** The real search indexer, wired as the application wires it (SD-2). */
+    public function indexer(): SearchIndexer
+    {
+        return new SearchIndexer(
+            $this->businesses,
+            $this->categories,
+            $this->branches,
+            $this->areas,
+            $this->subCities,
+            $this->aliases,
+            new SearchDocumentBuilder(new TextNormaliser(2, [])),
+            new SearchDocumentRepository($this->connection),
+        );
     }
 
     public function subCity(): SubCity
@@ -173,6 +196,7 @@ final class DirectoryScenario
             $this->permissions,
             new PublicationGate($this->businesses, $this->branches),
             new AuditRecorder(new AuditEntryRepository($this->connection), $this->clock),
+            $this->indexer(),
             $this->connection,
             new NullLogger(),
             $this->clock,

@@ -14,11 +14,15 @@ declare(strict_types=1);
  * Commands arrive with the slice that needs them:
  *
  *   M1  migrate · migration:status · rollback
- *   M2  reference:import (categories, areas) · search:reindex
- *   M3  search:reindex:drift · jobs:work (the queued-job drain, TD-06)
+ *   M2  reference:import (categories, areas, aliases) · search:reindex
+ *   M3  search:reindex:drift
+ *   M6  jobs:work (the queued-job drain, TD-06)
  */
 return [
     'migrate',
     'migration:status',
     'rollback',
+    'reference:import',
+    'search:reindex',
+    'search:reindex:drift',
 ];

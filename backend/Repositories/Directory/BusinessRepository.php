@@ -284,6 +284,42 @@ final class BusinessRepository
     }
 
     /**
+     * One row per Business — id, lifecycle state and last change. The whole
+     * table is small; maintenance and diagnostics read it wholesale (SD-5).
+     *
+     * @return list<array{id: int, state: BusinessState, updatedAt: DateTimeImmutable}>
+     */
+    public function statusSummaries(): array
+    {
+        $statement = $this->connection->pdo()->prepare(
+            'SELECT id, status, updated_at FROM ' . self::TABLE . ' ORDER BY id ASC',
+        );
+        $statement->execute();
+
+        $summaries = [];
+
+        while (($row = $statement->fetch()) !== false) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $state = BusinessState::tryFrom(Row::string($row, 'status'));
+
+            if ($state === null) {
+                continue;
+            }
+
+            $summaries[] = [
+                'id'        => Row::int($row, 'id'),
+                'state'     => $state,
+                'updatedAt' => DatabaseTime::parse(Row::string($row, 'updated_at')) ?? new DateTimeImmutable(),
+            ];
+        }
+
+        return $summaries;
+    }
+
+    /**
      * The duplicate signal at creation time (TR-55), by exact normalised
      * comparison: the same name, the same public email, or a branch phone
      * number that is already on file. Area alone is not a signal — every

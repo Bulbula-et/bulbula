@@ -46,6 +46,30 @@ final class AreaRepository
     }
 
     /**
+     * Every Area, in display order — small reference data (D-56), read
+     * wholesale for the browse indexes and the search facets.
+     *
+     * @return list<Area>
+     */
+    public function all(): array
+    {
+        $statement = $this->connection->pdo()->prepare(
+            'SELECT * FROM ' . self::TABLE . ' ORDER BY display_order ASC, name ASC, id ASC',
+        );
+        $statement->execute();
+
+        $areas = [];
+
+        while (($row = $statement->fetch()) !== false) {
+            if (is_array($row)) {
+                $areas[] = $this->hydrate($row);
+            }
+        }
+
+        return $areas;
+    }
+
+    /**
      * The Areas with those ids, keyed by id — one query for a whole page's
      * worth of rows rather than one query per row (DB-10).
      *

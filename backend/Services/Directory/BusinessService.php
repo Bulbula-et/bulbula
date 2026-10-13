@@ -20,6 +20,7 @@ use Bulbula\Backend\Repositories\Directory\CategoryRepository;
 use Bulbula\Backend\Repositories\Directory\SubCityRepository;
 use Bulbula\Backend\Repositories\Platform\RedirectRepository;
 use Bulbula\Backend\Services\Platform\AuditRecorder;
+use Bulbula\Backend\Services\Search\SearchIndexer;
 use Bulbula\Backend\Support\Clock;
 use InvalidArgumentException;
 use Throwable;
@@ -65,6 +66,7 @@ final class BusinessService
         private readonly SubCityRepository $subCities,
         private readonly RedirectRepository $redirects,
         private readonly AuditRecorder $audit,
+        private readonly SearchIndexer $indexer,
         private readonly Connection $connection,
         private readonly Clock $clock,
     ) {
@@ -143,6 +145,10 @@ final class BusinessService
                 throw new ConcurrencyConflictException($expectedVersion);
             }
 
+            // SD-2: the search document moves with the edit, in the same
+            // transaction.
+            $this->indexer->syncFor($businessId);
+
             $this->audit->record(
                 $actorType,
                 $actorId,
@@ -193,6 +199,8 @@ final class BusinessService
                 'slug_change',
                 $now,
             );
+
+            $this->indexer->syncFor($businessId);
 
             $this->audit->record(
                 $actorType,
@@ -279,6 +287,8 @@ final class BusinessService
 
             $this->businesses->touch($businessId, $now, $actorId);
 
+            $this->indexer->syncFor($businessId);
+
             $this->audit->record(
                 $actorType,
                 $actorId,
@@ -327,6 +337,8 @@ final class BusinessService
             $this->businesses->assignCategory($businessId, $categoryId, $isPrimary, $now);
             $this->businesses->touch($businessId, $now, $actorId);
 
+            $this->indexer->syncFor($businessId);
+
             $this->audit->record(
                 $actorType,
                 $actorId,
@@ -360,6 +372,10 @@ final class BusinessService
 
         $this->transact(function () use ($businessId, $reason, $actorType, $actorId, $now): void {
             $this->businesses->markClosed($businessId, $reason, $now, $actorId);
+
+            // SD-2: closure is a state, not a removal — the document keeps the
+            // Listing findable and records its `closed` status (MT-2, PR-2).
+            $this->indexer->syncFor($businessId);
 
             $this->audit->record($actorType, $actorId, 'listing.closed', 'listing', $businessId, $reason);
         });

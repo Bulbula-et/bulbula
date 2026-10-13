@@ -53,6 +53,31 @@ final class CategoryRepository
         return is_array($row) ? $this->hydrate($row) : null;
     }
 
+    /**
+     * The whole catalogue, in display order. Exactly two levels exist (D-06),
+     * so this is every node there is — callers group by `parentId` rather
+     * than recursing. Small reference data (D-56), read wholesale.
+     *
+     * @return list<Category>
+     */
+    public function all(): array
+    {
+        $statement = $this->connection->pdo()->prepare(
+            'SELECT * FROM ' . self::TABLE . ' ORDER BY display_order ASC, name ASC, id ASC',
+        );
+        $statement->execute();
+
+        $categories = [];
+
+        while (($row = $statement->fetch()) !== false) {
+            if (is_array($row)) {
+                $categories[] = $this->hydrate($row);
+            }
+        }
+
+        return $categories;
+    }
+
     /** @throws UnexpectedValueException when the parent would create a third level (D-06) */
     /**
      * The Categories a Business carries, the primary one first — one query,

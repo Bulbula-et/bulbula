@@ -55,7 +55,10 @@ final class ConsoleCommandsTest extends ApplicationTestCase
         // reaching this assertion at all is half the test.
         $names = $this->booted()->console($this->capture())->names();
 
-        self::assertSame(['migrate', 'migration:status', 'rollback'], $names);
+        self::assertSame(
+            ['migrate', 'migration:status', 'rollback', 'reference:import', 'search:reindex', 'search:reindex:drift'],
+            $names,
+        );
     }
 
     #[Test]
@@ -103,7 +106,7 @@ final class ConsoleCommandsTest extends ApplicationTestCase
 
         self::assertSame(0, $this->console(['rollback'], $output));
         // Everything applied in one batch reverts as one batch, newest first.
-        self::assertStringContainsString('reverted 2026_10_11_130400_create_rate_limits.php', $output->stdout);
+        self::assertStringContainsString('reverted 2026_10_13_120100_create_search_documents.php', $output->stdout);
         self::assertStringContainsString('reverted 2026_10_11_120000_create_audit_entries.php', $output->stdout);
         self::assertStringContainsString($shipped . ' migration(s) reverted', $output->stdout);
 
