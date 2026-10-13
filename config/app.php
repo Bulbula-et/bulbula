@@ -14,15 +14,16 @@ return [
     // Retention periods for personal data (days), configured per data class.
     // Set to null or 0 to keep data indefinitely; subject to legal obligations.
     // These values can be changed without code or schema changes — only config.
+    // Values from env are strings; cast to int when used numerically.
     'retention' => [
-        'account'           => (int) Env::get('RETENTION_ACCOUNT_DAYS', 0),     // 0 = indefinitely
-        'review'            => (int) Env::get('RETENTION_REVIEW_DAYS', 365 * 3), // 3 years
-        'business'          => (int) Env::get('RETENTION_BUSINESS_DAYS', 0),     // 0 = indefinitely
-        'category'          => (int) Env::get('RETENTION_CATEGORY_DAYS', 0),     // 0 = indefinitely
-        'area'              => (int) Env::get('RETENTION_AREA_DAYS', 0),        // 0 = indefinitely
-        'search_query'      => (int) Env::get('RETENTION_SEARCH_QUERY_DAYS', 30), // 30 days
-        'otp_code'          => (int) Env::get('RETENTION_OTP_CODE_DAYS', 7),     // 7 days
-        'csrf_token'        => (int) Env::get('RETENTION_CSRF_TOKEN_DAYS', 30),  // 30 days
+        'account'           => Env::get('RETENTION_ACCOUNT_DAYS', '0'),      // 0 = indefinitely
+        'review'            => Env::get('RETENTION_REVIEW_DAYS', '1095'),    // 3 years = 365*3
+        'business'          => Env::get('RETENTION_BUSINESS_DAYS', '0'),      // 0 = indefinitely
+        'category'          => Env::get('RETENTION_CATEGORY_DAYS', '0'),      // 0 = indefinitely
+        'area'              => Env::get('RETENTION_AREA_DAYS', '0'),         // 0 = indefinitely
+        'search_query'      => Env::get('RETENTION_SEARCH_QUERY_DAYS', '30'), // 30 days
+        'otp_code'          => Env::get('RETENTION_OTP_CODE_DAYS', '7'),      // 7 days
+        'csrf_token'        => Env::get('RETENTION_CSRF_TOKEN_DAYS', '30'),   // 30 days
     ],
 
     // The address the contact page publishes (IAR-11, C-15). Empty until the
