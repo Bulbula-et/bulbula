@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Bulbula\Backend\Services\Directory;
 
 use Bulbula\Backend\Domain\Directory\Branch;
+use Bulbula\Backend\Domain\Directory\Business;
 use Bulbula\Backend\Domain\Directory\Slug;
 use Bulbula\Backend\Repositories\Directory\AreaRepository;
 use Bulbula\Backend\Repositories\Directory\BranchRepository;
@@ -45,6 +46,37 @@ final class PublicListingService
             return null;
         }
 
+        return $this->assemble($business);
+    }
+
+    /**
+     * The profiles for a page of results, keyed by Business id — the same
+     * assembly as `find`, so a card shows exactly what the profile would
+     * (TD-05).
+     *
+     * @param list<int> $ids
+     *
+     * @return array<int, ListingProfile>
+     */
+    public function findMany(array $ids): array
+    {
+        $profiles = [];
+
+        foreach (array_unique($ids) as $id) {
+            $business = $this->businesses->findById($id);
+
+            if ($business === null || (!$business->isPublished() && !$business->isClosed())) {
+                continue;
+            }
+
+            $profiles[$id] = $this->assemble($business);
+        }
+
+        return $profiles;
+    }
+
+    private function assemble(Business $business): ListingProfile
+    {
         $categories = [];
         $primary    = null;
 

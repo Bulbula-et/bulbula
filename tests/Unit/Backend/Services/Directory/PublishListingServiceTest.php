@@ -222,6 +222,7 @@ final class PublishListingServiceTest extends DatabaseTestCase
             $this->scenario->permissions,
             new PublicationGate($this->scenario->businesses, $this->scenario->branches),
             new AuditRecorder(new AuditEntryRepository($this->database()), $this->clock),
+            $this->scenario->indexer(),
             $this->database(),
             $this->logger,
             $this->clock,

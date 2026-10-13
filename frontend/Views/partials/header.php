@@ -12,6 +12,8 @@ declare(strict_types=1);
 
         <nav class="site-nav" aria-label="Main">
             <a href="<?= e(url('/search')) ?>">Search</a>
+            <a href="<?= e(url('/categories')) ?>">Categories</a>
+            <a href="<?= e(url('/areas')) ?>">Areas</a>
             <a href="<?= e(url('/contact')) ?>">Contact</a>
         </nav>
     </div>

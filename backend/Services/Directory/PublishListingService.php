@@ -13,6 +13,7 @@ use Bulbula\Backend\Exceptions\PublicationRefusedException;
 use Bulbula\Backend\Repositories\Directory\BusinessRepository;
 use Bulbula\Backend\Repositories\Operations\PermissionRecordRepository;
 use Bulbula\Backend\Services\Platform\AuditRecorder;
+use Bulbula\Backend\Services\Search\SearchIndexer;
 use Bulbula\Backend\Support\Clock;
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
@@ -43,6 +44,7 @@ final class PublishListingService
         private readonly PermissionRecordRepository $permissions,
         private readonly PublicationGate $gate,
         private readonly AuditRecorder $audit,
+        private readonly SearchIndexer $indexer,
         private readonly Connection $connection,
         private readonly LoggerInterface $logger,
         private readonly Clock $clock,
@@ -82,6 +84,9 @@ final class PublishListingService
 
         $this->transact(function () use ($businessId, $actorType, $actorId, $now): void {
             $this->businesses->markPublished($businessId, $now, $actorId);
+            // SD-2: a staff edit is visible immediately — the search document
+            // moves in the same transaction as the publication itself.
+            $this->indexer->syncFor($businessId);
             $this->audit->record($actorType, $actorId, 'listing.published', 'listing', $businessId);
         });
 
@@ -110,6 +115,9 @@ final class PublishListingService
 
         $this->transact(function () use ($businessId, $reason, $actorType, $actorId, $now): void {
             $this->businesses->markUnpublished($businessId, $now, $actorId);
+            // SD-7: unpublishing deletes the document row, in the same
+            // transaction (SD-2).
+            $this->indexer->syncFor($businessId);
             $this->audit->record($actorType, $actorId, 'listing.unpublished', 'listing', $businessId, $reason);
         });
 
