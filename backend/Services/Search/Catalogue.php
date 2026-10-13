@@ -19,8 +19,8 @@ use Bulbula\Backend\Domain\Directory\SubCity;
 final readonly class Catalogue
 {
     /**
-     * @param list<array{category: Category, count: int}>          $categories top-level, with rolled-up counts
-     * @param list<array{subCity: SubCity, areas: list<array{area: Area, count: int}>}> $areas grouped by Sub-city (§5)
+     * @param list<array{category: Category, count: int, children: list<array{category: Category, count: int}>}> $categories top-level, with rolled-up counts
+     * @param list<array{subCity: SubCity, areas: list<array{area: Area, count: int}>}>                          $areas grouped by Sub-city (§5)
      */
     public function __construct(
         public array $categories,

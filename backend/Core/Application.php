@@ -26,6 +26,7 @@ use Bulbula\Backend\Integrations\Google\GoogleKeySet;
 use Bulbula\Backend\Integrations\Google\GoogleTokenVerifier;
 use Bulbula\Backend\Integrations\Google\StreamJsonFetcher;
 use Bulbula\Backend\Mail\LocalFileMailer;
+use Bulbula\Backend\Mail\EmailService;
 use Bulbula\Backend\Repositories\Directory\AliasRepository;
 use Bulbula\Backend\Repositories\Directory\AreaRepository;
 use Bulbula\Backend\Repositories\Directory\BranchRepository;
@@ -241,17 +242,15 @@ final class Application
      */
     private function otpSender(Config $config): OtpSender
     {
-        if ($config->string('mail.transport') !== 'local') {
-            return new UndeliverableOtpSender();
-        }
+        // The provider selected under D-41 determines the mail transport.
+        // Initially Brevo Free is used; later the SMTP settings from config can be
+        // switched without changing application code.
+        $transport = $config->string('mail.transport', 'brevo');
 
-        $directory = $config->string('mail.local_path', 'storage/tmp/mail');
+        $mailer = new \Bulbula\Backend\Mail\EmailService($config);
 
-        return new MailOtpSender(
-            new LocalFileMailer(
-                str_starts_with($directory, '/') ? $directory : $this->basePath . '/' . $directory,
-                $config->string('app.env'),
-            ),
+        return new \Bulbula\Backend\Services\Identity\MailOtpSender(
+            $mailer,
             $config,
         );
     }
@@ -458,6 +457,14 @@ final class Application
                 BusinessController::class => static fn (): BusinessController => new BusinessController(
                     $directory,
                     $config,
+                ),
+                BrowseController::class => fn (): BrowseController => new BrowseController(
+                    $view,
+                    $this->searchIndexer,
+                ),
+                ContactController::class => fn (): ContactController => new ContactController(
+                    $view,
+                    $config->string('contact_email', ''),
                 ),
                 AuthController::class     => fn (): AuthController => new AuthController(
                     $this->otpRequests(),

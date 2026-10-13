@@ -20,11 +20,15 @@ use Bulbula\Backend\Domain\Directory\Slug;
  *
  *   now     /sign-in · POST /sign-in/code · POST /sign-in/verify · POST /sign-out
  *           /b/{business}
- *   step 3  /b/{business}/{listing}
- *           /b/{business}/{listing}/reviews|photos|hours|report
- *           POST /reviews · POST /reports
- *   step 4  /search?q= · /categories · /c/{category} · /areas · /a/{area}
- *   step 6  /about · /privacy · /terms · /contact · /how-ranking-works
+ *           /search?q= · /categories · /c/{category} · /c/{category}/{subcategory}
+ *           /c/{category}/in/{area} · /areas · /a/{area} · /contact
+ *   later   /b/{business}/reviews|photos|hours|report · POST /reviews · POST /reports
+ *           /about · /privacy · /terms · /how-ranking-works
+ *
+ * `/in/` is a reserved word in the category path grammar (IA §2.1): the
+ * Category × Area form `/c/{category}/in/{area}` is registered before the
+ * Subcategory form so the literal segment cannot be shadowed, and a
+ * Subcategory may not be called `in`.
  */
 return static function (Router $router): void {
     $router->get('/', ['Bulbula\Frontend\Controllers\HomeController', 'index']);
@@ -38,6 +42,28 @@ return static function (Router $router): void {
         '/b/{business:' . Slug::ROUTE_PATTERN . '}',
         ['Bulbula\Frontend\Controllers\ListingController', 'show'],
     );
+
+    // Discovery (IA §2.1): the taxonomy and the geography. Most specific
+    // first — `/c/{category}/in/{area}` before `/c/{category}/{subcategory}`
+    // before `/c/{category}` — so each address keeps one meaning.
+    $browse = 'Bulbula\Frontend\Controllers\BrowseController';
+
+    $router->get('/categories', [$browse, 'categories']);
+    $router->get('/areas', [$browse, 'areas']);
+    $router->get(
+        '/c/{category:' . Slug::ROUTE_PATTERN . '}/in/{area:' . Slug::ROUTE_PATTERN . '}',
+        [$browse, 'categoryArea'],
+    );
+    $router->get(
+        '/c/{category:' . Slug::ROUTE_PATTERN . '}/{subcategory:' . Slug::ROUTE_PATTERN . '}',
+        [$browse, 'category'],
+    );
+    $router->get('/c/{category:' . Slug::ROUTE_PATTERN . '}', [$browse, 'category']);
+    $router->get('/a/{area:' . Slug::ROUTE_PATTERN . '}', [$browse, 'area']);
+
+    // The help route every page carries (IAR-11) and the correction channel
+    // of the zero-result screen (C-15).
+    $router->get('/contact', ['Bulbula\Frontend\Controllers\ContactController', 'show']);
 
     // Sign-in (C-31, C-32). Every state-changing path is a POST and carries a
     // CSRF token; `GET /sign-in` only issues one.

@@ -7,6 +7,8 @@ declare(strict_types=1);
  *
  * @var string      $title
  * @var string|null $description
+ * @var string|null $robots    e.g. "noindex, follow" — pages that must not
+ *                             enter the search index (SEO-8); absent otherwise
  * @var string      $content  rendered page markup, already escaped by its template
  */
 ?>
@@ -18,6 +20,9 @@ declare(strict_types=1);
     <title><?= e($title ?? 'Bulbula') ?></title>
     <?php if (($description ?? '') !== ''): ?>
         <meta name="description" content="<?= e($description) ?>">
+    <?php endif; ?>
+    <?php if (($robots ?? '') !== ''): ?>
+        <meta name="robots" content="<?= e($robots) ?>">
     <?php endif; ?>
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
 </head>

@@ -232,6 +232,39 @@ final class BusinessController
     }
 
     /**
+     * GET /api/v1/businesses/nearby — businesses near a given location.
+     *
+     * Takes latitude and longitude as query parameters.
+     * Returns up to 10 results (max 50).
+     * Each item is a shortened profile (no heavy text fields).
+     *
+     * @param array<string, string> $vars
+     */
+    public function nearby(Request $request, array $vars): Response
+    {
+        $lat = (float) $request->query('latitude');
+        $lng = (float) $request->query('longitude');
+        $limit = (int) ($request->query('limit') ?? 10);
+        $limit = min(max($limit, 1), 50);
+
+        if ($lat === 0 || $lng === 0) {
+            return $this->cacheable($request, ['data' => []]);
+        }
+
+        $businesses = $this->listings->findNearby($lat, $lng, $limit);
+
+        $items = array_map(fn (Bulbula\Backend\Domain\Directory\Business $business): array => [
+            'slug' => $business->slug->value,
+            'name' => $business->name,
+            'status' => $business->state->value,
+            'open_status' => 'unknown',
+        ], $businesses);
+
+        return $this->cacheable($request, ['data' => $items]);
+    }
+
+
+    /**
      * Public read caching (api-spec §1.8): a content-derived `ETag` (HC-4) so a
      * rebuild that changes nothing does not invalidate caches, `Cache-Control`
      * from configuration rather than constants (TR-196), and a `304` when the

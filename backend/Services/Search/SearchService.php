@@ -6,6 +6,7 @@ namespace Bulbula\Backend\Services\Search;
 
 use Bulbula\Backend\Domain\Directory\Area;
 use Bulbula\Backend\Domain\Directory\Category;
+use Bulbula\Backend\Domain\Directory\Slug;
 use Bulbula\Backend\Repositories\Directory\AreaRepository;
 use Bulbula\Backend\Repositories\Directory\CategoryRepository;
 use Bulbula\Backend\Repositories\Directory\SubCityRepository;
@@ -176,15 +177,21 @@ final class SearchService
 
         foreach ($topLevel as $category) {
             $set = [$category->id];
+            $childTiles = [];
 
             foreach ($children[$category->id] ?? [] as $child) {
                 $set[] = $child->id;
+                $childCount = $this->documents->distinctBusinessesForCategories([$child->id]);
+
+                if ($childCount > 0) {
+                    $childTiles[] = ['category' => $child, 'count' => $childCount];
+                }
             }
 
             $count = $this->documents->distinctBusinessesForCategories($set);
 
             if ($count > 0) {
-                $categories[] = ['category' => $category, 'count' => $count];
+                $categories[] = ['category' => $category, 'count' => $count, 'children' => $childTiles];
             }
         }
 
@@ -499,8 +506,25 @@ final class SearchService
     }
 
     /**
-     * @param list<MatchRow>   $rows
-     * @param array<int, bool> $nameMatches
+     * The Catalogue node at a slug, or null — the surface answers not-found
+     * for a destination that does not exist (architecture.md §6).
+     */
+    public function categoryBySlug(string $slug): ?Category
+    {
+        $address = Slug::tryFromString($slug);
+
+        return $address === null ? null : $this->categories->findBySlug($address);
+    }
+
+    public function areaBySlug(string $slug): ?Area
+    {
+        $address = Slug::tryFromString($slug);
+
+        return $address === null ? null : $this->areas->findBySlug($address);
+    }
+
+    /**
+     * @param list<MatchRow> $rows
      */
     private function pageOf(array $rows, array $nameMatches, string $stage, string $query, int $page): SearchResults
     {
@@ -671,7 +695,8 @@ final class SearchService
         return $facets;
     }
 
-    private function categoryById(int $id): ?Category
+    /** The Catalogue node with this id — for parent paths (IAR-21). */
+    public function categoryById(int $id): ?Category
     {
         foreach ($this->categories->all() as $category) {
             if ($category->id === $id) {
